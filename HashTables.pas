@@ -12,7 +12,8 @@ unit HashTables; ///////////////////////////////////////////////////////////////
 >> Version: 0.4
 
 >> Description
-   (Almost) an abstract hash table, fixed-size or auto-resizable.
+   (Almost) an abstract hash table, fixed-size or auto-resizable. Part of InvLibs 
+   unit collection.
    
 >> Author
    Peter Karpov

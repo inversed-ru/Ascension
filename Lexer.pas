@@ -14,7 +14,8 @@ unit Lexer; ////////////////////////////////////////////////////////////////////
 >> Description
    Universal  lexical  analysis  unit:  produces  a sequence  of tokens from a string
    input. The user must supply delimiters that separate lexemes (sequences of symbols
-   that form tokens) and procedures to classify the lexemes into tokens.
+   that form the tokens) and procedures to classify the lexemes into tokens.  Part of
+   InvLibs unit collection.
    
 >> Author
    Peter Karpov

@@ -12,7 +12,7 @@ unit BitMath; //////////////////////////////////////////////////////////////////
 >> Version: 1.3
 
 >> Description
-   Bit-level arithmetic functions.
+   Bit-level arithmetic functions. Part of InvLibs unit collection.
    
 >> Author
    Peter Karpov

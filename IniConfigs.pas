@@ -12,7 +12,7 @@ unit IniConfigs; ///////////////////////////////////////////////////////////////
 >> Version: 1.3
 
 >> Description
-   Unit for working with INI-style config files.
+   Unit for working with INI-style config files. Part of InvLibs unit collection.
    
 >> Author
    Peter Karpov

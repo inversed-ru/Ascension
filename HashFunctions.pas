@@ -13,7 +13,7 @@ unit HashFunctions; ////////////////////////////////////////////////////////////
 >> Version: 0.2
 
 >> Description
-   Hash functions for 8-bit strings.
+   Hash functions for 8-bit strings. Part of InvLibs unit collection.
    
 >> Author
    Peter Karpov
