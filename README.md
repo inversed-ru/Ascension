@@ -13,4 +13,4 @@ Runs | Information about the results of multiple optimization runs
 Runs_Best | The best solution found during multiple optimization runs
 
 ## How to create a PDM
-You can specify your own problem by creating a *problem.pas* file that supplies the types and routines required by each metaheuristic (a complete list can be found in *interface.inc*). See *Problem_NQ.pas* from the *problems* folder for an example of a complete PDM. If you don't need a certain algorithm, the corresponding definitions can be effectively omitted by placing a *{$I DummyXX.inc}* line at the end of the file.
+You can specify your own problem by creating a *problem.pas* file that supplies the types and routines required by each metaheuristic (full list can be found in *interface.inc*). See *Problem_NQ.pas* from the *problems* folder for an example of a complete PDM. If you don't need a certain algorithm, the corresponding definitions can be effectively omitted by placing a *{$I DummyXX.inc}* line at the end of the file.
