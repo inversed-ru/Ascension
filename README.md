@@ -1,5 +1,5 @@
 # Ascension
-A metaheuristic optimization framework. See the [project homepage](http://inversed.ru/Ascension.htm) for an overview and notable results (but note that some of the described features had to be omitted from the 2.0 release). 
+A metaheuristic optimization framework. See the [project homepage](http://inversed.ru/Ascension.htm) for an overview and notable results (please note that many of the described features had to be omitted from the 2.0 release). 
 
 ## How to use the framework
 Copy a project definition module (PDM) into the project folder, rename it to *problem.pas*, then compile and run Ascension. A couple of example PDMs are located in the *problems* folder. Algorithm parameters are specified in the *Config.ini* file.
