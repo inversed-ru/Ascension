@@ -31,9 +31,9 @@ ScoreToReach | The desired value of the score function, can be used by stopping 
 Parameter | Description
 --- | --- 
 Mode | Local search mode.
-⇢ "First" | Pick the first improving move from a move list
-⇢ "Best" | Pick the best move from a move list
-⇢ "Chain" | Sort all moves by score, then try to sequentially apply all improving moves in order from best to worst
+⇢"First" | Pick the first improving move from a move list
+⇢"Best" | Pick the best move from a move list
+⇢"Chain" | Sort all moves by score, then try to sequentially apply all improving moves in order from best to worst
 StatusIters | Interval between saving the data about optimization process to a status file, nothing is saved if set to zero
 
 ### Tabu Search
@@ -52,29 +52,56 @@ Tfin | Final temperature, used if *TfinEBased* is *No*
 dEmax | Maximal change of energy, used if *T0Mode*  is *"EBased"*
 dEmin | Minimal change of energy, used if *TfinEBased*  is *Yes*
 T0Mode | Initial temperature selection
-⇢ "Manual" | Determined by *T0*
-⇢ "EBased" | Calculated based on *dEmax*
-⇢ "AutoLow" | Automatic selection, lower temperature mode
-⇢ "AutoHigh" | Automatic selection, higher temperature mode
+⇢"Manual" | Determined by *T0*
+⇢"EBased" | Calculated based on *dEmax*
+⇢"AutoLow" | Automatic selection, lower temperature mode
+⇢"AutoHigh" | Automatic selection, higher temperature mode
 TfinEBased | Final temperature selection
-⇢ No | Determined by *Tfin*
-⇢ Yes | Calculated based on *dEmin*
+⇢No | Determined by *Tfin*
+⇢Yes | Calculated based on *dEmin*
 Acceptance | Acceptance function
-⇢ "Exp" | Exp(-x<sup>p</sup>)
-⇢ "Power" | 1 / (1 + x<sup>p</sup>)
-⇢ "Tsallis" | (1 - (1 - p) x)<sup>1 / (1 - p)</sup>
-⇢ "Threshold" | (1 - Sign(x - 1)) / 2
-⇢ "Barker" | 1 / (1 + Exp(x))
+⇢"Exp" | Exp(-x<sup>p</sup>)
+⇢"Power" | 1 / (1 + x<sup>p</sup>)
+⇢"Tsallis" | (1 - (1 - p) x)<sup>1 / (1 - p)</sup>
+⇢"Threshold" | (1 - Sign(x - 1)) / 2
+⇢"Barker" | 1 / (1 + Exp(x))
 AcceptanceP | Acceptance function parameter
 Schedule | Cooling schedule type
-⇢ "Zero" | T = 0
-⇢ "Log" | T ~ 1 / (C + Ln(1 + t / L)) 
-⇢ "Power" | T ~ (1 + t / L)<sup>p</sup>
-⇢ "Exp" | T ~ Exp(-(t / L)<sup>p</sup>)
+⇢"Zero" | T = 0
+⇢"Log" | T ~ 1 / (C + Ln(1 + t / L)) 
+⇢"Power" | T ~ (1 + t / L)<sup>p</sup>
+⇢"Exp" | T ~ Exp(-(t / L)<sup>p</sup>)
 ScheduleP | Cooling schedule parameter
 NReheat | Number of reheating stages, no reheating if set to 1
 FastReheat | Determines the duration of reheating stages
-⇢ No | Each reheating stage takes the same number of iterations
-⇢ Yes | Later reheating stages take less iterations
+⇢No | Each reheating stage takes the same number of iterations
+⇢Yes | Later reheating stages take less iterations
 Smoothing | The amount of smoothing applied when calculating statistics for the status file
 StatusIters | Interval between saving the data about optimization process to a status file, nothing is saved if set to zero.
+
+### Genetic Algorithm
+Parameter | Description 
+--- | --- 
+PopulationSize | Number of individuals in the population
+Selection | Method of selecting individuals for reproduction
+⇢"RankProp" | Selection probability is proportional to (1 - R)<sup>p</sup> if p > 0 or R<sup>-p</sup> if p < 0, where R is the individual's rank normalized to [0 .. 1] and p = *SelectionP*
+⇢"Dist" | *SelectionP* individuals are picked at random, then the pair with the largest (smallest) intersolution distance is selected if *SelectionP* > 0 (< 0)
+⇢"DistToBest" | *SelectionP* individuals are picked at random, then two individuals with the largest (smallest) distance to the best individual in the population are selected if *SelectionP* > 0 (< 0)
+SelectionP | Selection parameter
+Replacement | Method of selecting which individual to replace
+⇢"Worst" | Worst individual in the population
+⇢"InvRank" | Selection probability is proportional to R<sup>p</sup> if p > 0 or (1 - R)<sup>-p</sup> if p < 0, where R is the individual's rank normalized to [0 .. 1] and p = *ReplacementP*
+⇢"WorstParent" | Worst parent
+⇢"RandParent" | Random parent
+⇢"SimilarParent" | Most similar parent
+⇢"Influx" | Worst parent. When the child is better than both parents, also replace the other parent with a new solution
+ReplacementP | Replacement parameter
+Acceptance | Criterion for determining whether the solution picked by *Replacement* method actually gets replaced
+⇢"Elitist" | Replace only if the child is better
+⇢"Unconditional" | Replace unconditionally
+StopCriterion | Criterion for stopping the algorithm
+⇢"MaxGens" | Maximal number of generations is reached
+⇢"MaxNFE" | Maximal number of function evaluations is reached
+⇢"Score" | *ScoreToReach* is reached
+StatusGens | Interval in generations between saving the data about optimization process to a status file, nothing is saved if set to zero
+SaveGens | Interval in generations between saving the population, nothing is saved if set to zero
