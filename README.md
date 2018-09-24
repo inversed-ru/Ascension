@@ -20,10 +20,10 @@ You can specify your own problem by creating a *problem.pas* file that supplies 
 Parameter | Description
 --- | --- 
 Algorithm | Optimization algorithm
-⇢ "SA" | Simulated Annealing
-⇢ "GA" | Genetic Algorithm
-⇢ "LS" | Local Search
-⇢ "TS" | Tabu Search
+⇢"SA" | Simulated Annealing
+⇢"GA" | Genetic Algorithm
+⇢"LS" | Local Search
+⇢"TS" | Tabu Search
 NRuns | Number of independent algorithm runs
 ScoreToReach | The desired value of the score function, can be used by stopping criteria
 
