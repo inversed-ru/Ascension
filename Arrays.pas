@@ -1,5 +1,5 @@
 { 
-Copyright (c) Peter Karpov 2010 - 2017.
+Copyright (c) Peter Karpov 2010 - 2018.
 
 Usage of the works is permitted provided that this instrument is retained with 
 the works, so that any entity that uses the works is notified of this instrument.
@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Arrays; ////////////////////////////////////////////////////////////////////////
 {
->> Version: 1.2
+>> Version: 1.4
 
 >> Description
    Basic array routines. Part of InvLibs unit collection.
@@ -29,6 +29,10 @@ unit Arrays; ///////////////////////////////////////////////////////////////////
    - See if any operations are bottlenecks in any programs and optimize them
 
 >> Changelog
+   1.4   : 2018.12.14   ~ Argument order in SaveToText and SaveToFile
+                        + SaveToText for TIntArrays
+   1.3   : 2018.11.08   + Overloaded version of AppendArray for TIntArrays
+                        + Concat procedure
    1.2   : 2017.12.15   + DistanceL2 function
    1.1   : 2017.12.08   + RandMinIndex and RandMaxIndex functions
    1.0   : 2017.12.02   ~ Renamed the unit to Arrays
@@ -270,6 +274,23 @@ procedure Append(
 procedure AppendArray(
    var   A           :  TRealArray;
    const B           :  TRealArray);
+         overload;
+   
+procedure AppendArray(
+   var   A           :  TIntArray;
+   const B           :  TIntArray);
+         overload;
+         
+// Concatenate A and B into C
+procedure Concat(
+   var   C           :  TRealArray;
+   const A, B        :  TRealArray);
+   overload;
+   
+procedure Concat(
+   var   C           :  TIntArray;
+   const A, B        :  TIntArray);
+   overload;
 
 // Append Value to A if it is distinct from all the elements, 
 // return if it was appended. Uses linear search, ~N time.
@@ -449,14 +470,21 @@ function LoadFromText(
 
 // Save A to a text file located at Path
 function SaveToText(
-   var   A     :  TRealArray;
-   const Path  :  AnsiString
+   const Path  :  AnsiString;
+   const A     :  TRealArray
          )     :  Boolean;
+         overload;
+         
+function SaveToText(
+   const Path  :  AnsiString;
+   const A     :  TIntArray
+         )     :  Boolean;
+         overload;
 
 // Save A to a file located at Path
 function SaveToFile(
-   var   A     :  TRealArray;
-   const Path  :  AnsiString
+   const Path  :  AnsiString;
+   const A     :  TRealArray
          )     :  Boolean;
 
 implementation //////////////////////////////////////////////////////////////////////
@@ -829,6 +857,7 @@ procedure Append(
 procedure AppendArray(
    var   A           :  TRealArray;
    const B           :  TRealArray);
+         overload;
    var
          i, OldLenA,
                LenB  :  Integer;
@@ -839,7 +868,44 @@ procedure AppendArray(
    for i := 0 to LenB - 1 do
       A[OldLenA + i] := B[i];
    end;
-
+   
+   
+procedure AppendArray(
+   var   A           :  TIntArray;
+   const B           :  TIntArray);
+         overload;
+   var
+         i, OldLenA,
+               LenB  :  Integer;
+   begin
+   OldLenA := Length(A);
+      LenB := Length(B);
+   SetLength(A, OldLenA + LenB);
+   for i := 0 to LenB - 1 do
+      A[OldLenA + i] := B[i];
+   end;
+   
+   
+// Concatenate A and B into C
+procedure Concat(
+   var   C           :  TRealArray;
+   const A, B        :  TRealArray);
+   overload;
+   begin
+   C := Copy(A);
+   AppendArray(C, B);
+   end;
+   
+   
+procedure Concat(
+   var   C           :  TIntArray;
+   const A, B        :  TIntArray);
+   overload;
+   begin
+   C := Copy(A);
+   AppendArray(C, B);
+   end;
+   
 
 // Append Value to A if it is distinct from all the elements, 
 // return if it was appended. Uses linear search, ~N time.
@@ -1324,8 +1390,8 @@ function LoadFromText(
 
 // Save A to a text file located at Path
 function SaveToText(
-   var   A     :  TRealArray;
-   const Path  :  AnsiString
+   const Path  :  AnsiString;
+   const A     :  TRealArray
          )     :  Boolean;
    var
          i     :  Integer;
@@ -1343,10 +1409,31 @@ function SaveToText(
    end;
 
 
+// #COPYPASTA
+function SaveToText(
+   const Path  :  AnsiString;
+   const A     :  TIntArray
+         )     :  Boolean;
+   var
+         i     :  Integer;
+         Data  :  Text;
+   begin
+   if OpenWrite(Data, Path) = Success then
+      begin
+      for i := 0 to Length(A) - 1 do
+         WriteLn(Data, A[i]);
+      Close(Data);
+      Result := Success;
+      end
+   else
+      Result := Fail;
+   end;
+   
+
 // Save A to a file located at Path
 function SaveToFile(
-   var   A     :  TRealArray;
-   const Path  :  AnsiString
+   const Path  :  AnsiString;
+   const A     :  TRealArray
          )     :  Boolean;
    var
          i     :  Integer;
