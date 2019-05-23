@@ -62,7 +62,7 @@ interface //////////////////////////////////////////////////////////////////////
 uses
       InvSys;
 const
-      IsMinimize = True;
+      Minimization = True;
       ScoreToReach = 0;
       FileExtension = 'txt';
       Size    = 8;
