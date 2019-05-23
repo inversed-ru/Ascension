@@ -22,6 +22,7 @@ Problem_NQ.pas | N queens
 Problem_No_Subsquares.pas | Maximal density subsquare-free arrangements
 Problem_Peacable_Queens.pas | Peacable queens
 Problem_Still_Life.pas | Maximal density still life
+
 See the description section inside of each file for more details.
 
 ## How to create a PDM
