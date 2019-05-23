@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Acceptance; ////////////////////////////////////////////////////////////////////
 {
->> Version: 0.2
+>> Version: 0.3
 
 >> Description
    Various acceptance functions for annealing-like algorithms and a generic 
@@ -26,6 +26,7 @@ unit Acceptance; ///////////////////////////////////////////////////////////////
    ? Remove Barker criterion (inferior performance, complicates the code)
 
 >> Changelog
+   0.3 : 2019.05.21  ~ Renamed IsMinimize to Minimization
    0.2 : 2018.09.18  ~ FreePascal compatibility
                      ~ Rewrote the comments
                      - Moved the improvement section to LocalSearchAlg
@@ -134,7 +135,7 @@ function ProbAccept(
          dE, x       :  Real;
    begin
    dE := NewScore - OldScore;
-   if not IsMinimize then
+   if not Minimization then
       dE := -dE;
 
    if Acceptance.Style = asBarker then

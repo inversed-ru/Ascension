@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Common; ////////////////////////////////////////////////////////////////////////
 {
->> Version: 0.7
+>> Version: 0.8
 
 >> Description
    Common routines and types used by various metaheuristics.
@@ -27,6 +27,7 @@ unit Common; ///////////////////////////////////////////////////////////////////
     ? Rewrite NormDeltaScore using SignMinimize / SignMaximize
     
 >> Changelog
+   0.8 : 2019.05.21  ~ Renamed IsMinimize to Minimization
    0.7 : 2018.09.18  ~ FreePascal compatibility
                      ~ Renamed TScoreRelation to TScoreComparison
                      + Missing routine comments
@@ -71,7 +72,7 @@ const
 
       EmptyStats  :  TRunStats = (NFEfull: 0; NFEpartial: 0; Iters: 0);
 
-      SignMinimize = 2 * Ord(IsMinimize) - 1;
+      SignMinimize = 2 * Ord(Minimization) - 1;
       SignMaximize = -SignMinimize;
 
 {-----------------------<< Scores >>------------------------------------------------}
@@ -267,7 +268,7 @@ function CompareScores(
       Result := scoreWorse
    else
       Result := scoreEqual;
-   if IsMinimize then
+   if Minimization then
       InvertScoreRelation(Result);
    end;
 
@@ -284,7 +285,7 @@ function CompareScores(
       Result := scoreWorse
    else
       Result := scoreEqual;
-   if IsMinimize then
+   if Minimization then
       InvertScoreRelation(Result);
    end;
 
@@ -295,9 +296,8 @@ function NormDeltaScore(
          )     :  TScore;
          overload;
    begin
-   if IsMinimize then
-      Result := B.Score - A.Score
-   else
+   if Minimization then
+      Result := B.Score - A.Score else
       Result := A.Score - B.Score;
    end;
 
@@ -309,9 +309,8 @@ function NormDeltaScore(
          )        :  Real;
          overload;
    begin
-   if IsMinimize then
-      Result := BScore - AScore
-   else
+   if Minimization then
+      Result := BScore - AScore else
       Result := AScore - BScore;
    end;
 

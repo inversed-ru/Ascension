@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit LocalSearchAlg; ////////////////////////////////////////////////////////////////
 {
->> Version: 0.5
+>> Version: 0.6
 
 >> Description
    Implementation of local search supporting variable neighborhood search and several
@@ -34,6 +34,7 @@ unit LocalSearchAlg; ///////////////////////////////////////////////////////////
    - Experiment with combo mode to see if it deserves a comeback
 
 >> Changelog
+   0.6 : 2019.05.21  ~ Renamed IsMinimize to Minimization
    0.5 : 2018.09.16  - Combo mode
                      ~ Freepascal compatibility
                      + Improvement section moved from acceptance
@@ -292,7 +293,7 @@ procedure ChainLocalSearch(
 
    begin
    // Initialization
-   if IsMinimize then
+   if Minimization then
       Order := soAscending else
       Order := soDescending;
 

@@ -51,6 +51,12 @@ program Ascension; /////////////////////////////////////////////////////////////
     - User-defined callbacks for visualization
 
 >> Changelog
+      2.1 : 2019.05.23  + 5 PDMs:
+                          + 3D N queens
+                          + Chess coverings
+                          + Peacable queens
+                          + Maximum density still life
+                          + Maximum density squarefree arrangements
       2.0 : 2018.09.19  - Most experimental algorithms and features
                         ~ Config format for enumerated parameters
       1.6 : 2013.01.29  + Too much to document
