@@ -2,7 +2,7 @@
 A metaheuristic optimization framework. See the [project homepage](http://inversed.ru/Ascension.htm) for an overview and notable results (please note that many of the described features had to be omitted from the 2.0 release). 
 
 ## How to use the framework
-Copy a project definition module (PDM) into the project folder, rename it to *problem.pas*, then compile and run Ascension. A couple of example PDMs are located in the *problems* folder. Algorithm parameters are specified in the *Config.ini* file.
+Copy a problem definition module (PDM) from the *problems* into the project folder, rename it to *problem.pas*, then compile (I recommend using [Lazarus IDE](https://www.lazarus-ide.org/)) and run Ascension. Algorithm parameters are specified in the *Config.ini* file.
 Several files are created during the optimization process:
 
 File | Description
@@ -11,6 +11,18 @@ XX_Status | Status file containing the data about the optimization process (XX i
 XX_Best | The best solution found during the optimization.
 Runs | Information about the results of multiple optimization runs
 Runs_Best | The best solution found during multiple optimization runs
+
+## Included PDMs
+File | Problem
+--- | ---
+Problem_2DHP.pas | Hydrophobic-polar protein folding model
+Problem_3DNQ.pas | 3D N queens
+Problem_Chess_Covering.pas | Queen (non)domination, knights covering
+Problem_NQ.pas | N queens
+Problem_No_Subsquares.pas | Maximal density subsquare-free arrangements
+Problem_Peacable_Queens.pas | Peacable queens
+Problem_Still_Life.pas | Maximal density still life
+See the description section inside of each file for more details.
 
 ## How to create a PDM
 You can specify your own problem by creating a *problem.pas* file that supplies the types and routines required by each metaheuristic (full list can be found in *interface.inc*). See *Problem_NQ.pas* from the *problems* folder for an example of a complete PDM. If you don't need a certain algorithm, the corresponding definitions can be effectively omitted by placing a *{$I DummyXX.inc}* line at the end of the file.
@@ -105,3 +117,11 @@ StopCriterion | Criterion for stopping the algorithm
 ⇢"Score" | *ScoreToReach* is reached
 StatusGens | Interval in generations between saving the data about optimization process to a status file, nothing is saved if set to zero
 SaveGens | Interval in generations between saving the population, nothing is saved if set to zero
+
+## Acknowledgements
+This project has been supported by the following patrons via [Patreon](https://www.patreon.com/inversed):
+* Brian Bucklew
+* Anton Shepelev
+* Adam Hill
+* John Metcalf
+* Tomoyuki Naito
