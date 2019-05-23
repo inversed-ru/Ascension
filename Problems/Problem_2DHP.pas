@@ -1,5 +1,5 @@
 { 
-Copyright (c) Peter Karpov 2010 - 2018.
+Copyright (c) Peter Karpov 2010 - 2019.
 
 Usage of the works is permitted provided that this instrument is retained with 
 the works, so that any entity that uses the works is notified of this instrument.
@@ -9,13 +9,19 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Problem; ///////////////////////////////////////////////////////////////////////
 {
->> Version: 0.4
+>> Version: 0.5
 
 >> Description
    2D lattice hydrophobic-polar protein folding model PDM. In this model, the 
    proteins are represented by sequences of aminoacids confined to a 2D square grid. 
    The aminoacids can be either hydrophobic (H) or polar (P). The goal is to find a 
-   fold (a self-avoiding walk) that maximizes the number of H-H contacts.
+   fold (a self-avoiding walk) that maximizes the number of H-H contacts. The score 
+   is the number of H-H contacts minus the penalty for self-intersections.
+   
+   Problem-specific constants:
+      StrSequence    Protein sequence
+   
+   Supported algorithms: LS, TS, SA, GA.
    
 >> Author
    Peter Karpov
@@ -31,6 +37,10 @@ unit Problem; //////////////////////////////////////////////////////////////////
 
    Pull moves are very effective, but for the sake of simplicity and uniformity
    another class of moves is used.
+   
+>> References
+   - An Improved Ant Colony Optimisation Algorithm for the 2D HP Protein Folding 
+     Problem. Alena Shmygelska, Holger H. Hoos.
 
 >> ToDo
     - Profile
@@ -42,6 +52,8 @@ unit Problem; //////////////////////////////////////////////////////////////////
     - Fix move generation inefficiency: high level moves may include low level ones
     
 >> Changelog
+   0.5 : 2019.05.21  ~ Renamed IsMinimize to Minimization
+                     - Distance reversal invariance
    0.4 : 2018.09.23  ~ FreePascal compatibility
                      - Sections related to algorithms omitted from Ascension 2.0 
    0.3 : 2015.06.26  ~ Distance invariant to inversion and reversal
@@ -56,7 +68,7 @@ unit Problem; //////////////////////////////////////////////////////////////////
 }
 interface ///////////////////////////////////////////////////////////////////////////
 const
-      IsMinimize     =  False;
+      Minimization   =  False;
       FileExtension  =  'txt';
       MaxMoveSize    =  6;
 type
@@ -109,7 +121,6 @@ implementation /////////////////////////////////////////////////////////////////
 uses
       InvSys,
       Math,
-      //Vectors,
       Arrays,
       Statistics,
       RandVars,
@@ -237,7 +248,7 @@ procedure SaveSolution(
       else
          Lattice[x, y] := AcidName[ Sequence[i] ];
       if i = (LenSeq - 1) then
-   {-}   break;
+   {<}   break;
 
       MoveRel(x, y, AbsDir, Solution.X[i]);
       if AbsDir in [adL, adR] then
@@ -365,19 +376,6 @@ procedure Invert(
    end;
 
 
-// Create NewSol by reversing Sol's directions
-procedure Reverse(
-   var   NewSol   :  TSolution;
-   const Sol      :  TSolution);
-   var
-         i        :  Integer;
-   begin
-   AssignSolution(NewSol, Sol);
-   for i := 1 to LenSeq - 2 do
-      NewSol.X[i] := Sol.X[LenSeq - 1 - i];
-   end;
-
-
 // Return the number of mismatching elements between A and B
 function HammingDist(
    const A,
@@ -399,15 +397,10 @@ function Distance(
          Solution2   :  TSolution
          )           :  TSolutionDistance;
    var
-         Inv2, Rev2,
-         InvRev2     :  TSolution;
+         Inv2        :  TSolution;
    begin
-    Invert(Inv2, Solution2);
-   Reverse(Rev2, Solution2);
-    Invert(InvRev2, Rev2);
-   Result := Min(
-      Min(HammingDist(Solution1, Solution2), HammingDist(Solution1, Inv2)),
-      Min(HammingDist(Solution1, Rev2),      HammingDist(Solution1, InvRev2)));
+   Invert(Inv2, Solution2);
+   Result := Min(HammingDist(Solution1, Solution2), HammingDist(Solution1, Inv2));
    end;
 
 {-----------------------<< Local Search >>------------------------------------------}
@@ -507,7 +500,7 @@ procedure GetRandomMove(
                   if Pos[i] = Pos[j] then
                      begin
                      Different := False;
-               {-}   break;
+               {<}   break;
                      end;
             until Different;
 
@@ -575,7 +568,7 @@ procedure UndoSAMove(
 
 // Apply a mutation operator to the Solution
 procedure Mutate(
-   var   Solution  :  TSolution);
+   var   Solution :  TSolution);
    var
          Move     :  TMove;
    begin
@@ -692,7 +685,7 @@ function IsMoveTabu(
          if TabuList[ Pos[i], NewDir[i] ] <> 0 then
             begin
             Result := True;
-      {-}   break;
+      {<}   break;
             end;
    end;
 
@@ -705,9 +698,10 @@ function TabuTenure(
    Result := Round( 3 + 5 * (1 - t) );
    end;
 
-{===================================================================================}
+{-----------------------<< Initialization >>----------------------------------------}
 var
       i  :  Integer;
+      
 initialization
 // Convert a character sequence to an acid sequence
 LenSeq := Length(StrSequence);

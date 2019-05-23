@@ -1,5 +1,5 @@
 { 
-Copyright (c) Peter Karpov 2010 - 2018.
+Copyright (c) Peter Karpov 2010 - 2019.
 
 Usage of the works is permitted provided that this instrument is retained with 
 the works, so that any entity that uses the works is notified of this instrument.
@@ -9,17 +9,16 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Problem; ///////////////////////////////////////////////////////////////////////
 {
->> Version: 1.1
+>> Version: 1.2
 
 >> Description
    N queens PDM: place N queens on a N x N board so that no two queens attack each
    other.
+   
+   Problem-specific constants:
+      Size           Board size
 
-   Supported algorithms:
-   - Local Search
-   - Tabu Search
-   - Simulated Annealing
-   - Genetic Algorithm
+   Supported algorithms: LS, TS, SA, GA.
    
 >> Author
    Peter Karpov
@@ -33,6 +32,7 @@ unit Problem; //////////////////////////////////////////////////////////////////
    coordinates. 
 
 >> Changelog
+   1.2 : 2019.05.22 ~ Renamed IsMinimize to Minimization
    1.1 : 2018.09.18 ~ FreePascal compatibility
                     - EDA operators
    1.0 : 2016.04.11 - "set coordinate" move type
@@ -49,7 +49,7 @@ interface //////////////////////////////////////////////////////////////////////
 uses
       InvSys;
 const
-      IsMinimize     = True;
+      Minimization   = True;
       FileExtension  = 'txt';
       Size           = 64;
 type
@@ -203,11 +203,20 @@ procedure SaveSolution(
    var   FileSol     :  Text;
    const Solution    :  TSolution);
    var
-         i           :  TCoord;
+         i, j        :  TCoord;
    begin
    WriteLn(FileSol, 'Score: ', Solution.Score);
    for i := 0 to Size - 1 do
-      WriteLn(FileSol, Solution.a[i]);
+      Write(FileSol, Solution.a[i], ' ');
+   WriteLn(FileSol);
+   for i := 0 to Size - 1 do
+      begin
+      for j := 0 to Size - 1 do
+         if Solution.a[i] = j then
+            Write(FileSol, 'Q ') else
+            Write(FileSol, '. ');
+      WriteLn(FileSol); 
+      end;
    end;
 
 
@@ -220,7 +229,7 @@ procedure LoadSolution(
    begin
    ReadLn(FileSol);
    for i := 0 to Size - 1 do
-      ReadLn(FileSol, Solution.a[i]);
+      Read(FileSol, Solution.a[i]);
    SetScore(Solution);
    end;
 
@@ -250,7 +259,7 @@ function Distance(
    Result := Sum;
    end;
 
-{-----------------------<< Moves >>-------------------------------------------------}
+{-----------------------<< Local Search >>------------------------------------------}
 var
       gMoveList   :  TMoveList;
 
@@ -384,8 +393,8 @@ procedure Mutate(
    end;
 
 
-// Apply a crossover operator to Parent1 and Parent2 to obtain a Child. Recalc
-// indicates whether a score recalculation is strictly necessary.
+// Apply a crossover operator to Parent1 and Parent2, creating the Child. Recalc
+// indicates whether score recalculation is strictly necessary.
 procedure Crossover(
    var   Child    :  TSolution;
    const Parent1,
@@ -408,7 +417,7 @@ procedure AssignTabuList(
    end;
 
 
-// Initialize the TabuList, must be called before use
+// Initialize the TabuList
 procedure InitTabuList(
    var   TabuList :  TTabuList);
    var
