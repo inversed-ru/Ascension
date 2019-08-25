@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF} {$APPTYPE CONSOLE} {$MINENUMSIZE 4}
 program Ascension; //////////////////////////////////////////////////////////////////
 {
->> Version: 2.0
+>> Version: 2.2
 
 >> Description
    Ascension, a general-purpose metaheuristic optimization framework. 
@@ -51,6 +51,7 @@ program Ascension; /////////////////////////////////////////////////////////////
     - User-defined callbacks for visualization
 
 >> Changelog
+      2.2 : 2019.08.25  + Cooperative tabu search
       2.1 : 2019.05.23  + 5 PDMs:
                           + 3D N queens
                           + Chess coverings

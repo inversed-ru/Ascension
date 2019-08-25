@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit TabuSearchAlg; /////////////////////////////////////////////////////////////////
 {
->> Version: 1.3
+>> Version: 1.4
 
 >> Description
    Tabu search escapes local optima by maintaining a tabu list of forbidden moves. At
@@ -36,6 +36,7 @@ unit TabuSearchAlg; ////////////////////////////////////////////////////////////
     - Tabu search with same structure as in balanced hill climbing
    
 >> Changelog
+   1.4 : 2019.08.25  + Cooperative tabu search
    1.3 : 2018.09.18  - Experimental tabu search variants
                      ~ FreePascal compatibility
    1.2 : 2011.09.25  + Beam tabu search
@@ -75,7 +76,9 @@ procedure TabuSearch(
 implementation //////////////////////////////////////////////////////////////////////
 uses
       InvSys,
-      ExtraMath;
+      ExtraMath,
+      Arrays,
+      SolutionLists;
 
 const
       PathStatus = 'TS_Status.txt';
@@ -245,4 +248,130 @@ procedure TabuSearch(
    end;
 
 
+// Run a cooperative tabu search with given Params, return the Best   
+// solution found, report and save the progress according to Status. 
+// If RandomInit = True, a random initial solution is created, otherwise 
+// the search starts from the provided one.
+procedure CoopTabuSearch(
+   var   Best           :  TSolution;
+   const Params         :  TTSParameters;
+   const Status         :  TTSStatus;
+         RandomInit     :  Boolean);
+   var
+         Work,
+         LocalBest      :  TSolutionList;
+         TabuLists      :  array of TTabuList;
+         i, j, k,
+         IdUpdGlobalBest:  Integer;
+         Iters          :  Integer;
+         fileStatus     :  Text;
+         LSStats        :  TRunStats;
+         StatusOk,
+         UpdGlobalBest  :  Boolean;
+         UpdLocalBest   :  TBoolArray;
+   //const
+         //LSParams       :  TLSParameters = lsmFast;
+
+   procedure WriteHeader(
+      const fileStatus  :  Text);
+      var
+            i           :  Integer;
+      begin
+      Write(fileStatus,
+         'Iter'         ,         Tab,
+         'BestScore'    ,         Tab);
+      for i := 1 to 4 do
+         Write(fileStatus, i, Tab);
+      WriteLn(fileStatus, 'SelScore');
+      end;
+
+
+   procedure WriteStatus(
+      var   fileStatus  :  Text;
+            Iters       :  Integer;
+      const Work        :  TSolutionList;
+      const Best        :  TSolution;
+            IdSelected  :  Integer);
+      var
+            i           :  Integer;
+      begin
+      Write(fileStatus,
+         Iters,         Tab,
+         Best.Score,    Tab);
+      WriteLn(fileStatus, Work._[IdSelected].Score);
+      Flush(fileStatus);
+      end;
+
+   begin
+   // Initialization
+   if RandomInit then
+      begin
+      NewSolList(Work, Params.PopSize);
+      AssignSolution(Work.Best, Best);
+      end
+   else
+      begin
+      //NewSolution(Best);
+      //LocalSearch(Best, LSStats, LSParams, NoStatus, {RandomInit:} False);
+      FillSolList(Work, Best, Params.PopSize);
+      end;
+   AssignSolList(LocalBest, Work);
+   SetLength(TabuLists,      Params.PopSize);
+   InitArray(UpdLocalBest,   Params.PopSize, False);
+   for i := 0 to Params.PopSize - 1 do
+      InitTabuList(TabuLists[i]);
+   Iters := 0;
+   IdUpdGlobalBest := 0;
+   UpdGlobalBest := False;
+
+   // Write status header
+   StatusOk := TryOpenWrite(fileStatus, PathStatus, Status.ShowMessage) = Success;
+   if StatusOk then
+      WriteHeader(fileStatus);
+
+   if StatusOk then
+      begin
+      repeat
+         Inc(Iters);
+         i := Modulo(-Iters, Work.N);
+  
+         // Share the local best
+         if (i < (Work.N - 1)) and UpdLocalBest[i + 1] then 
+            //if False then
+            //if CompareScores(LocalBest._[i + 1], LocalBest._[i]) = scoreBetter then
+            //if CompareScores(LocalBest._[i + 1], Work._[i]) = scoreBetter then
+            if True then
+               begin
+               AssignSolution(Work._[i], LocalBest._[i + 1]);
+               AssignTabuList(TabuLists[i], TabuLists[i + 1]);
+               if CompareScores(Work._[i], LocalBest._[i]) = scoreBetter then
+                  begin
+                  AssignSolution(LocalBest._[i], Work._[i]);
+                  UpdLocalBest[i] := True;
+                  end;
+               UpdLocalBest[i + 1] := False;
+               end;
+            
+         // Perform a tabu step
+         UpdGlobalBest := TabuStep(Work._[i], Best, 
+            TabuLists[i], TabuTenure(1 - i / (Work.N - 1)), Status);
+         if UpdGlobalBest then
+            IdUpdGlobalBest := i;
+         if CompareScores(Work._[i], LocalBest._[i]) = scoreBetter then
+            begin
+            AssignSolution(LocalBest._[i], Work._[i]);
+            UpdLocalBest[i] := True;
+            end;
+
+         // Write the status
+         if Divisible(Iters, Status.IterStatus) then
+            WriteStatus(fileStatus, Iters, Work, Best, i);
+      until Iters = Params.MaxIters;
+
+      // Run complete
+      Close(fileStatus);
+      TrySaveSolution(NameBest, Best, Status.ShowMessage);
+      end;
+   end;
+   
 end.
