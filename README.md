@@ -37,6 +37,7 @@ Algorithm | Optimization algorithm
 ⇢"GA" | Genetic Algorithm
 ⇢"LS" | Local Search
 ⇢"TS" | Tabu Search
+⇢"CTS" | Cooperative Tabu Search
 NRuns | Number of independent algorithm runs
 ScoreToReach | The desired value of the score function, can be used by stopping criteria
 
@@ -53,8 +54,8 @@ StatusIters | Interval between saving the data about optimization process to a s
 Parameter | Description 
 --- | --- 
 Iterations | Total number of iterations
+PopSize | Population size (cooperative variant only)
 StatusIters | Interval between saving the data about optimization process to a status file, nothing is saved if set to zero
-
 
 ### Simulated Annealing
 Parameter | Description 
