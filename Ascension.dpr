@@ -461,10 +461,16 @@ procedure RunTS(
       InitLoadTable(LT);
       AddLoadParam(LT, MaxIters,    Sec + 'Iterations',     IntNonNeg   );
       AddLoadParam(LT, IterStatus,  Sec + 'StatusIters',    IntNonNeg   );
+      AddLoadParam(LT, PopSize,     Sec + 'PopSize',        IntPos      );
       AddLoadParam(LT, ScoreToReach,      'ScoreToReach',   nil         );
-      LoadFromConfig(LT, Config, Errors);
+      LoadFromConfig(LT, Config, Errors);   
       if Errors.N = 0 then
-         TabuSearch(Best, Stats, Params, Status, {RandomInit:} True) else
+         case Algorithm of
+            mhTS:    TabuSearch(Best, Stats, Params, Status, {RandomInit:} True);
+            mhCTS:   CoopTabuSearch(Best, Params, Status, {RandomInit:} True);
+            else     Assert(False);
+            end
+      else
          DisplayErrors(Errors);
       end;
    end;
@@ -479,7 +485,7 @@ procedure Main;
          ErrorInvalidAlg = 'Invalid algorithm specified';
          ErrorUnknownAlg = 'Unknown metaheuristic';
          RunTable : array [TMetaheuristic] of ProcRun =
-           (RunGA, RunSA, RunLS, RunTS);
+           (RunGA, RunSA, RunLS, RunTS, RunTS);
    var
          Config         :  TIniConfig;
          LT             :  TLoadTable;
@@ -513,7 +519,7 @@ procedure Main;
       //AddLoadParam(LT,    TimeLimit,      'TimeLimit',   RealNonNeg  );
       //AddLoadParam(LT, UseTimeLimit,   'UseTimeLimit'                );
       LoadFromConfig(LT, Config, Errors);
-      GetEnum(@Algorithm, Errors, SAlgorithm, 'GA SA LS TS');
+      GetEnum(@Algorithm, Errors, SAlgorithm, 'GA SA LS TS CTS');
       if Errors.N <> 0 then
          begin
          DisplayErrors(Errors);

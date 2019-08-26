@@ -72,6 +72,16 @@ procedure TabuSearch(
    const Params      :  TTSParameters;
    const Status      :  TTSStatus;
          RandomInit  :  Boolean);   
+         
+// Run a cooperative tabu search with given Params, return the Best   
+// solution found, report and save the progress according to Status. 
+// If RandomInit = True, a random initial solution is created, otherwise 
+// the search starts from the provided one.
+procedure CoopTabuSearch(
+   var   Best           :  TSolution;
+   const Params         :  TTSParameters;
+   const Status         :  TTSStatus;
+         RandomInit     :  Boolean);
 
 implementation //////////////////////////////////////////////////////////////////////
 uses

@@ -45,7 +45,7 @@ uses
       Messages;
 type
       TMetaheuristic =
-        (mhGA, mhSA, mhLS, mhTS);
+        (mhGA, mhSA, mhLS, mhTS, mhCTS);
 
       PSolution  = ^TSolution;
       PSolutions = ^TSolutions;
@@ -65,7 +65,7 @@ type
          end;
 const
       ShortNames : array [TMetaheuristic] of AnsiString =
-        ('GA', 'SA', 'LS', 'TS');
+        ('GA', 'SA', 'LS', 'TS', 'CTS');
 
       NoStatus :  TBasicStatus =
          (IterStatus: 0; SaveBest: False; ShowMessage: nil);
