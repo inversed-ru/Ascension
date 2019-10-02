@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit StringLists; ///////////////////////////////////////////////////////////////////
 {
->> Version: 1.1
+>> Version: 1.2
 
 >> Description
    Basic string list implementation.
@@ -25,6 +25,7 @@ unit StringLists; //////////////////////////////////////////////////////////////
    - Use hashing if fast search is required
 
 >> Changelog
+   1.2 : 2019.10.02  * Parse procedure
    1.1 : 2018.09.09  ~ FreePascal compatibility
    1.0 : 2014.09.25  ~ Sectionized
                      + ExtractWords procedure
@@ -191,7 +192,7 @@ procedure Parse(
    i := 1;
    repeat
       j := 1 + Length(S);
-      Found := GetPos(j, Delim, S, {Start:} i);
+      Found := GetPos(j, S, Delim, {Start:} i);
       SubS := CopyRange(S, i, j - 1);
       AddToStringList(StringList, SubS);
       i := j + Length(Delim);
