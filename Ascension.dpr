@@ -1,5 +1,5 @@
 { 
-Copyright (c) Peter Karpov 2010 - 2018.
+Copyright (c) Peter Karpov 2010 - 2019.
 
 Usage of the works is permitted provided that this instrument is retained with 
 the works, so that any entity that uses the works is notified of this instrument.
@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF} {$APPTYPE CONSOLE} {$MINENUMSIZE 4}
 program Ascension; //////////////////////////////////////////////////////////////////
 {
->> Version: 2.2
+>> Version: 2.3
 
 >> Description
    Ascension, a general-purpose metaheuristic optimization framework. 
@@ -51,6 +51,8 @@ program Ascension; /////////////////////////////////////////////////////////////
     - User-defined callbacks for visualization
 
 >> Changelog
+      2.3 : 2019.12.01  + Multirun statistics collection
+                        + Lots of new GA options
       2.2 : 2019.08.25  + Cooperative tabu search
       2.1 : 2019.05.23  + 5 PDMs:
                           + 3D N queens
@@ -86,6 +88,9 @@ uses
       InvSys,
       StringLists,
       StringUtils,
+      Arrays,
+      Statistics,
+      RandVars,
       Formatting,
       IniConfigs,
       Math,
@@ -102,10 +107,11 @@ uses
 
 type
       ProcRun =   procedure (
-                     var   Best        :  TSolution;
-                     var   Stats       :  TRunStats;
-                     const Config      :  TIniConfig;
-                           Algorithm   :  TMetaheuristic);
+                     var   Best           :  TSolution;
+                     var   Stats          :  TRunStats;
+                     var   MutirunStats   :  TMultirunStats;
+                     const Config         :  TIniConfig;
+                           Algorithm      :  TMetaheuristic);
 
 const
       PressToExit     = 'Press ENTER to exit';
@@ -244,22 +250,16 @@ function RealNonNeg(
 // Get the Index of S in the list of space separated EnumNames
 // or return Fail if S is not found
 function GetEnumIndex(
-   var   Index       :  LongWord;
+   var   Index       :  Integer;
    const S, 
          EnumNames   :  AnsiString
          )           :  Boolean;
    var
-         Work        :  AnsiString;
+         NameList    :  TStringList;
          Found       :  Integer;
    begin
-   if GetPos(Found, EnumNames, S) = Success then
-      begin
-      Work := CopyRange(EnumNames, {From:} 1, {To:} Found - 1);
-      Index := SubstrCount(Work, ' ');
-      Result := Success;
-      end
-   else
-      Result := Fail;
+   Parse(NameList, EnumNames, {Delim:} ' ');
+   Result := Find(Index, NameList, S);
    end;
 
 
@@ -271,7 +271,7 @@ procedure GetEnum(
    const Name, 
          EnumNames      :  AnsiString);
    var
-         Index          :  LongWord;
+         Index          :  Integer;
    const
          ErrorBadEnum   :  AnsiString
                         = 'Invalid enumerated parameter: {}, valid values are: {}';
@@ -279,6 +279,98 @@ procedure GetEnum(
    if GetEnumIndex(Index, Name, EnumNames) = Success then
       PLongWord(ptrVar)^ := Index else
       AddToStringList(Errors, Format(ErrorBadEnum, [Name, EnumNames]));
+   end;
+
+{-----------------------<< Parameter Tweaking >>------------------------------------}
+
+// Perform a test GA run with Params, update ArmStats with the obtained score or
+// NFE depending on stopping criterion
+procedure TestGARun(
+   var   ArmStats       :  TRunningStats;
+   var   BestSoFar      :  TSolution;
+   const Params         :  TGAParameters);
+   var   
+         Best           :  TSolution;
+         RunStats       :  TRunStats;
+         MultirunStats  :  TMultirunStats;
+         X              :  Real;
+   const
+         PathBest       = 'Runs_Best';
+   begin
+   InitMultirunStats(MultirunStats, {NVars:} 0);
+   GeneticAlgorithm(Best, RunStats, MultirunStats, Params, NoGAStatus);
+   if CompareScores(Best, BestSoFar) = scoreBetter then
+      begin
+      AssignSolution(BestSoFar, Best);
+      TrySaveSolution(PathBest, BestSoFar, ShowMessage);
+      end;
+   if Params.Stopping = scScore then
+      X := RunStats.NFEFull else
+      X := Best.Score;
+   UpdateRunningStats(ArmStats, X);
+   end;
+
+
+// Find the optimal GA population size via Thompson sampling,
+// save statistics in the process
+procedure TweakPopSize(
+   var   Params         :  TGAParameters);
+   var
+         ArmStats       :  array of TRunningStats;
+         X              :  TRealArray;
+         i, NRuns       :  Integer;
+         BestSoFar      :  TSolution;
+         FileArmStats   :  Text;
+   const
+         NArms          =  22;
+         Values         :  array [0 .. NArms - 1] of Integer
+                        =  (4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 225,
+                            289, 361, 441, 576, 729, 961, 1225, 1600, 2116);//, 2809); //, 3721, 4900, 6400);//, 8464);
+         PathArmStats   =  'ArmStats.txt';
+         MinSamples     =  8;
+   begin
+   // Initialize arm statistics
+   WriteLn('Arm Initialization:');
+   SetLength(ArmStats, NArms);
+   NewSolution(BestSoFar);
+   for i := 0 to NArms - 1 do
+      begin
+      Write(1 + i, ' ');
+      InitRunningStats(ArmStats[i]);
+      Params.PopSize := Values[i];
+      repeat
+         TestGARun(ArmStats[i], BestSoFar, Params);
+      until (ArmStats[i].N >= MinSamples) and (StandDev(ArmStats[i]) > 0);
+      end;
+   WriteLn('Done');
+
+   // Thompson sampling
+   SetLength(X, NArms);
+   repeat
+      // Pick an arm
+      for i := 0 to NArms - 1 do
+         X[i] := ArmStats[i].M + RandGauss * StandError(ArmStats[i]);
+      if (Params.Stopping = scScore) or Minimization then
+         i := RandMinIndex(X) else
+         i := RandMaxIndex(X);
+         
+      // Run the test
+      Params.PopSize := Values[i];
+      TestGARun(ArmStats[i], BestSoFar, Params);
+      WriteLn(Format('{>4}{>6}{>12~4e1}', 
+         [Params.PopSize, ArmStats[i].N, ArmStats[i].M]));
+      
+      // Save arm statistics
+      OpenWrite(FileArmStats, PathArmStats);
+      for i := 0 to NArms - 1 do
+         WriteLn(FileArmStats, 
+            Values[i]               , Tab,
+            ArmStats[i].N           , Tab,
+            ArmStats[i].M           , Tab,
+            StandDev  (ArmStats[i]) , Tab,
+            StandError(ArmStats[i])   );
+      Close(FileArmStats);
+   until False;
    end;
 
 {-----------------------<< Runing metaheuristics >>---------------------------------}
@@ -296,20 +388,22 @@ procedure DisplayErrors(
 // Run the genetic algorithm with parameters specified in Config, return the Best
 // solution and run statistics Stats
 procedure RunGA(
-   var   Best        :  TSolution;
-   var   Stats       :  TRunStats;
-   const Config      :  TIniConfig;
-         Algorithm   :  TMetaheuristic);
+   var   Best           :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MutirunStats   :  TMultirunStats;
+   const Config         :  TIniConfig;
+         Algorithm      :  TMetaheuristic);
    var
-         Params      :  TGAParameters;
-         Status      :  TGAStatus;
-         LT          :  TLoadTable;
-         Errors      :  TStringList;
+         Params         :  TGAParameters;
+         Status         :  TGAStatus;
+         LT             :  TLoadTable;
+         Errors         :  TStringList;
          Sec,
          SSelection,
          SReplacement,
          SAcceptance,
-         SStopping   :  AnsiString;
+         SStopping      :  AnsiString;
+         Tweak          :  Boolean;
    begin
    Sec := ShortNames[mhGA] + '.';
    Status.ShowMessage := ShowMessage;
@@ -329,18 +423,41 @@ procedure RunGA(
       AddLoadParam(LT, MaxNFE,           Sec + 'MaxNFE',         IntNonNeg    );
       AddLoadParam(LT, GenStatus,        Sec + 'StatusGens',     IntNonNeg    );
       AddLoadParam(LT, GenSave,          Sec + 'SaveGens',       IntNonNeg    );
+      AddLoadParam(LT, Tweak,            Sec + 'TweakPopSize'                 );
       AddLoadParam(LT, ScoreToReach,           'ScoreToReach',   nil          );
       LoadFromConfig(LT, Config, Errors);
       GetEnum(@Selection, Errors, SSelection, 
-         'RankProp Dist DistToBest');
+         'RankProp FitUniform NearRank ' + 
+         'Dist DistToBest ' + 
+         'Ring LeakyRing LeakyRingTD Torus Segment ' +
+         'SegmentTD Crescent VarDegreeTD Halo DirHalo ' +
+         'ThreadedRings InterconRings ThreadedIsles BridgedIsles ' +
+         'ChainedIsles InterconIsles RandNearConRings RandFarConRings ' +
+         'RandNearConIsles RandFarConIsles DisconIslesTD');
       GetEnum(@Replacement, Errors, SReplacement, 
-         'Worst InvRank WorstParent RandParent SimilarParent Influx');
-      GetEnum(@ChildAcceptance, Errors, SAcceptance, 
-         'Elitist Unconditional');
+         'Worst WorstParent RandParent InvRank InvRankLn InvRankTD ' +
+         'SimParent CenParent ' +
+         'SimWorseParent CenWorseParent ' +
+         'NoveltySim NoveltyCen ' +
+         'CompoundSimSD CompoundCenSD ' +
+         'CompoundSimRD CompoundCenRD ' +
+         'CompoundSimTD CompoundCenTD ' +
+         'CompSoftSimSD CompSoftCenSD ' +
+         'CompSoftSimRD CompSoftCenRD ' +
+         'CompSoftSimTD CompSoftCenTD ' +
+         'InfluxRare InfluxRD InfluxSD InfluxTD ' + 
+         'Digraph');
+      GetEnum(@Acceptance, Errors, SAcceptance, 
+         'Elitist Unconditional ' +
+         'Threshold ThresholdTD ThresholdSD ' +
+         'DistToBestTD DistToBestSD DistToBestRD ' +
+         'DistToParentTD DistToParentSD DistToParentRD');
       GetEnum(@Stopping, Errors, SStopping, 
          'MaxGens MaxNFE Score');
       if Errors.N = 0 then
-         GeneticAlgorithm(Best, Stats, Params, Status)
+         if Tweak then 
+            TweakPopSize(Params) else
+            GeneticAlgorithm(Best, Stats, MutirunStats, Params, Status) 
       else
          DisplayErrors(Errors);
       end;
@@ -350,16 +467,17 @@ procedure RunGA(
 // Run the local search with parameters specified in Config, return the Best
 // solution and run statistics Stats
 procedure RunLS(
-   var   Best        :  TSolution;
-   var   Stats       :  TRunStats;
-   const Config      :  TIniConfig;
-         Algorithm   :  TMetaheuristic);
+   var   Best           :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MutirunStats   :  TMultirunStats;
+   const Config         :  TIniConfig;
+         Algorithm      :  TMetaheuristic);
    var
-         Params      :  TLSParameters;
-         Status      :  TLSStatus;
-         LT          :  TLoadTable;
-         Errors      :  TStringList;
-         Sec, SMode  :  AnsiString;
+         Params         :  TLSParameters;
+         Status         :  TLSStatus;
+         LT             :  TLoadTable;
+         Errors         :  TStringList;
+         Sec, SMode     :  AnsiString;
    begin
    Sec := ShortNames[mhLS] + '.';
    Status.ShowMessage := ShowMessage;
@@ -373,7 +491,7 @@ procedure RunLS(
       LoadFromConfig(LT, Config, Errors);
       GetEnum(@Params, Errors, SMode, 'First Best Chain');
       if Errors.N = 0 then
-         LocalSearch(Best, Stats, Params, Status, {RandomInit:} True)
+         LocalSearch(Best, Stats, MutirunStats, Params, Status, {RandomInit:} True)
       else
          DisplayErrors(Errors);
       end;
@@ -383,10 +501,11 @@ procedure RunLS(
 // Run the simulated annealing with parameters specified in Config, return the Best
 // solution and run statistics Stats
 procedure RunSA(
-   var   Best        :  TSolution;
-   var   Stats       :  TRunStats;
-   const Config      :  TIniConfig;
-         Algorithm   :  TMetaheuristic);
+   var   Best           :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MutirunStats   :  TMultirunStats;
+   const Config         :  TIniConfig;
+         Algorithm      :  TMetaheuristic);
    var
          Params         :  TSAParameters;
          Status         :  TSAStatus;
@@ -431,7 +550,7 @@ procedure RunSA(
       if Errors.N = 0 then
          begin
          MaxIters := Round(RealMaxIters);
-         SimulatedAnnealing(Best, Stats, Params, Status);
+         SimulatedAnnealing(Best, Stats, MutirunStats, Params, Status);
          end
       else
          DisplayErrors(Errors);
@@ -442,16 +561,17 @@ procedure RunSA(
 // Run the tabu search with parameters specified in Config, return the Best
 // solution and run statistics Stats
 procedure RunTS(
-   var   Best        :  TSolution;
-   var   Stats       :  TRunStats;
-   const Config      :  TIniConfig;
-         Algorithm   :  TMetaheuristic);
+   var   Best           :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MutirunStats   :  TMultirunStats;
+   const Config         :  TIniConfig;
+         Algorithm      :  TMetaheuristic);
    var
-         Params      :  TTSParameters;
-         Status      :  TTSStatus;
-         LT          :  TLoadTable;
-         Errors      :  TStringList;
-         Sec         :  AnsiString;
+         Params         :  TTSParameters;
+         Status         :  TTSStatus;
+         LT             :  TLoadTable;
+         Errors         :  TStringList;
+         Sec            :  AnsiString;
    begin
    Sec := ShortNames[mhTS] + '.';
    Status.ShowMessage := ShowMessage;
@@ -466,8 +586,10 @@ procedure RunTS(
       LoadFromConfig(LT, Config, Errors);   
       if Errors.N = 0 then
          case Algorithm of
-            mhTS:    TabuSearch(Best, Stats, Params, Status, {RandomInit:} True);
-            mhCTS:   CoopTabuSearch(Best, Params, Status, {RandomInit:} True);
+            mhTS:    TabuSearch(
+               Best, Stats, MutirunStats, Params, Status, {RandomInit:} True);
+            mhCTS:   CoopTabuSearch(
+               Best, MutirunStats, Params, Status, {RandomInit:} True);
             else     Assert(False);
             end
       else
@@ -479,28 +601,30 @@ procedure RunTS(
 // Run the metaheuristic specified in a config file
 procedure Main;
    const
-         PathConfig  = 'config.ini';
-         PathRuns    = 'Runs.txt';
-         PathBest    = 'Runs_Best';
-         ErrorInvalidAlg = 'Invalid algorithm specified';
-         ErrorUnknownAlg = 'Unknown metaheuristic';
-         RunTable : array [TMetaheuristic] of ProcRun =
-           (RunGA, RunSA, RunLS, RunTS, RunTS);
+         PathConfig        = 'config.ini';
+         PathRuns          = 'Runs.txt';
+         PathBest          = 'Runs_Best';
+         ErrorInvalidAlg   = 'Invalid algorithm specified';
+         ErrorUnknownAlg   = 'Unknown metaheuristic';
+         RunTable          : array [TMetaheuristic] of ProcRun 
+                           = (RunGA, RunSA, RunLS, RunTS, RunTS);
+         PathMultirunStats =  '_Stats.txt';
    var
-         Config         :  TIniConfig;
-         LT             :  TLoadTable;
-         Errors         :  TStringList;
-         Algorithm      :  TMetaheuristic;
-         SAlgorithm     :  AnsiString;
-         NRuns, Run     :  Integer;
-         Solution, Best :  TSolution;
+         Config            :  TIniConfig;
+         LT                :  TLoadTable;
+         Errors            :  TStringList;
+         Algorithm         :  TMetaheuristic;
+         SAlgorithm        :  AnsiString;
+         NRuns, Run        :  Integer;
+         Solution, Best    :  TSolution;
          //RunTime,
          //TotalTime      :  TPreciseTime;
          //   TimeLimit   :  Real;
          //UseTimeLimit   :  Boolean;
-         Done           :  Boolean;
-         Stats          :  TRunStats;
-         FileRuns       :  Text;
+         Done              :  Boolean;
+         Stats             :  TRunStats;
+         MultirunStats     :  TMultirunStats;
+         FileRuns          :  Text;
    begin
    repeat
       // Load the config
@@ -538,6 +662,7 @@ procedure Main;
             'Time'         );
 
          Run := 1;
+         InitMultirunStats(MultirunStats, {NVars:} 0);
          //StartTiming(TotalTime);
          repeat
             TryShowMessage(
@@ -546,7 +671,7 @@ procedure Main;
             
             Stats := EmptyStats;
             //StartTiming(RunTime);
-            RunTable[Algorithm](Solution, Stats, Config, Algorithm);
+            RunTable[Algorithm](Solution, Stats, MultirunStats, Config, Algorithm);
             //StopTiming(RunTime);
             TryShowMessage(ShortNames[Algorithm] + MsgRunFinished, ShowMessage);
             if (Run = 1) or (CompareScores(Solution, Best) = scoreBetter) then
@@ -562,6 +687,8 @@ procedure Main;
                Stats.Iters                   );
                //RunTime.dt                    );
             Flush(fileRuns);
+            if Sqr(Round(Sqrt(Run))) = Run then
+               SaveStats(ShortNames[Algorithm] + PathMultirunStats, MultirunStats);
 
             Inc(Run);
             Done := Run > NRuns;
@@ -571,6 +698,8 @@ procedure Main;
             //   True:    Done := TotalTime.dt > TimeLimit;
             //   end;
          until Done;
+         if Sqr(Round(Sqrt(NRuns))) <> NRuns then
+            SaveStats(ShortNames[Algorithm] + PathMultirunStats, MultirunStats);
          Close(fileRuns);
          end;
    until True;

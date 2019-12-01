@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit LocalSearchAlg; ////////////////////////////////////////////////////////////////
 {
->> Version: 0.6
+>> Version: 0.7
 
 >> Description
    Implementation of local search supporting variable neighborhood search and several
@@ -34,6 +34,7 @@ unit LocalSearchAlg; ///////////////////////////////////////////////////////////
    - Experiment with combo mode to see if it deserves a comeback
 
 >> Changelog
+   0.7 : 2019.10.01  + Multirun statistics collection
    0.6 : 2019.05.21  ~ Renamed IsMinimize to Minimization
    0.5 : 2018.09.16  - Combo mode
                      ~ Freepascal compatibility
@@ -70,15 +71,16 @@ type
          LSMode      :  TLSMode;
          end;
 
-// Perform local search starting from Solution, update Stats, report and save the
-// progress according to Status. The type of local search is determined by Params. 
+// Perform local search starting from Solution, update Stats and
+// MultirunStats. The type of local search is determined by Params. 
 // In case of RandomInit, Solution is initialized randomly.
 procedure LocalSearch(
-   var   Solution    :  TSolution;
-   var   Stats       :  TRunStats;
-   const Params      :  TLSParameters;
-   const Status      :  TLSStatus;
-         RandomInit  :  Boolean);
+   var   Solution       :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MultirunStats  :  TMultirunStats;
+   const Params         :  TLSParameters;
+   const Status         :  TLSStatus;
+         RandomInit     :  Boolean);
 
 // Apply local search with LSMode to Solution, disregard status and statistics
 procedure LSImprovement(
@@ -158,43 +160,51 @@ function MakeMove(
    end;
 
 
-// Perform classic local search starting from Solution, update Stats, report and
-// save the progress according to Status. In case of FullSearch, the best move 
-// is applied each iteration.
+// Perform classic local search starting from Solution, update Stats and 
+// MultirunStats. In case of FullSearch, the best move is applied each iteration.
 procedure ClassicLocalSearch(
-   var   Solution    :  TSolution;
-   var   Stats       :  TRunStats;
-         FullSearch  :  Boolean;
-   const Status      :  TLSStatus);
+   var   Solution       :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MultirunStats  :  TMultirunStats;
+         FullSearch     :  Boolean;
+   const Status         :  TLSStatus);
    var
-         MoveList    :  TMoveList;
-         Level       :  Integer;
-         Found       :  Boolean;
-         UseStatus,
-         StatusOk    :  Boolean;
-         fileStatus  :  Text;
+         MoveList       :  TMoveList;
+         Level          :  Integer;
+         Found          :  Boolean;
+         UseStatus      :  Boolean;
+         
+   const
+         NStatsFields   =  3;
 
-   // Write the header of FileStatus
+   // Create the header of MultirunStats
    procedure WriteHeader(
-      var   FileStatus  :  Text);
+      var   MultirunStats  :  TMultirunStats);
       begin
-      WriteLn(FileStatus,
-         'Iter',     Tab,
-         'Score',    Tab,
-         'Level'     );
+      with MultirunStats do
+         if NVars = 0 then
+            begin
+            InitMultirunStats(MultirunStats, NStatsFields);
+            SetLength(Header, NStatsFields);
+            Header[0] := 'Iter';
+            Header[1] := 'Score';
+            Header[2] := 'Level';
+            end;
       end;
 
-   // Write the search status data to FileStatus
+   // Add the current search statistics to MultirunStats
    procedure WriteStatus(
-      var   FileStatus     :  Text;
+      var   MultirunStats  :  TMultirunStats;
       const Best           :  TSolution;
             Iters, Level   :  Integer);
+      var   
+            Data           :  TRealArray;
       begin
-      WriteLn(fileStatus,
-         Iters,      Tab,
-         Best.Score, Tab,
-         Level       );
-      Flush(FileStatus);
+      SetLength(Data, NStatsFields);
+      Data[0] := Iters;
+      Data[1] := Best.Score;
+      Data[2] := Level;
+      AddSample(MultirunStats, Data);
       end;
 
    begin
@@ -202,15 +212,12 @@ procedure ClassicLocalSearch(
    UseStatus := Status.IterStatus <> 0;
    if UseStatus then
       begin
-      StatusOk := TryOpenWrite(FileStatus, PathStatus, Status.ShowMessage) = Success;
-      if StatusOk then
-         WriteHeader(FileStatus);
-      end
-   else
-      StatusOk := True;
+      WriteHeader(MultirunStats);
+      PrepareNextRun(MultirunStats);
+      end;
 
    // Perform the search
-   if StatusOk then with Stats do
+   with Stats do
       begin
       repeat
          // Try making an improving move
@@ -227,68 +234,74 @@ procedure ClassicLocalSearch(
 
          // Write status
          if Divisible(Iters, Status.IterStatus) then
-            WriteStatus(FileStatus, Solution, Iters, Level);
+            WriteStatus(MultirunStats, Solution, Iters, Level);
       until not Found;
 
       // Run complete
       ShowNewBestScore(Solution, Status.ShowMessage);
-      if UseStatus then
-         Close(FileStatus);
       end;
    end;
 
 
 // #HACK huge, may need splitting
 // #HACK rewrite using ExtMoveLists
-// Perform chain local search starting from Solution, update Stats, report and
-// save the progress according to Status. 
+// Perform chain local search starting from Solution, update Stats and
+// MultirunStats
 procedure ChainLocalSearch(
-   var   Solution    :  TSolution;
-   var   Stats       :  TRunStats;
-   const Status      :  TLSStatus);
+   var   Solution       :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MultirunStats  :  TMultirunStats;
+   const Status         :  TLSStatus);
    var
-         i           :  Integer;
+         i              :  Integer;
          MoveList,
-         Candidates  :  TMoveList;
-         Scores      :  TRealArray;
-         Ranking     :  TIntArray;
-         Order       :  TSortOrder;
-         OldScore    :  TScore;
-         Undo        :  TMoveUndo;
-         NFound      :  Integer;
-         Level       :  Integer;
-         UseStatus,
-         StatusOk    :  Boolean;
-         FileStatus  :  Text;
-
-   // Write the header of FileStatus
+         Candidates     :  TMoveList;
+         Scores         :  TRealArray;
+         Ranking        :  TIntArray;
+         Order          :  TSortOrder;
+         OldScore       :  TScore;
+         Undo           :  TMoveUndo;
+         NFound         :  Integer;
+         Level          :  Integer;
+         UseStatus      :  Boolean;
+   const
+         NStatsFields   =  5;
+         
+   // Create the header of MultirunStats
    procedure WriteHeader(
-         var   FileStatus  :  Text);
-         begin
-         WriteLn(FileStatus,
-            'Iter',     Tab,
-            'Score',    Tab,
-            'Level',    Tab,
-            'NTested',  Tab,
-            'NFound');
-         end;
-
-   // Write the search status data to FileStatus
+      var   MultirunStats  :  TMultirunStats);
+      begin
+      with MultirunStats do
+         if NVars = 0 then
+            begin
+            InitMultirunStats(MultirunStats, NStatsFields);
+            SetLength(Header, NStatsFields);
+            Header[0] := 'Iter';
+            Header[1] := 'Score';
+            Header[2] := 'Level';
+            Header[3] := 'NTested';
+            Header[4] := 'NFound';
+            end;
+      end;
+      
+   // Add the current search statistics to MultirunStats
    procedure WriteStatus(
-      var   FileStatus  :  Text;
-            Iters       :  Integer;
-      const Best        :  TSolution;
+      var   MultirunStats  :  TMultirunStats;
+      const Best           :  TSolution;
+            Iters,
             Level,
             NTested,
-            NFound      :  Integer);
+            NFound         :  Integer);
+      var   
+            Data           :  TRealArray;
       begin
-      WriteLn(FileStatus,
-         Iters,      Tab,
-         Best.Score, Tab,
-         Level,      Tab,
-         NTested,    Tab,
-         NFound      );
-      Flush(FileStatus);
+      SetLength(Data, NStatsFields);
+      Data[0] := Iters;
+      Data[1] := Best.Score;
+      Data[2] := Level;
+      Data[3] := NTested;
+      Data[4] := NFound;
+      AddSample(MultirunStats, Data);
       end;
 
    begin
@@ -301,14 +314,11 @@ procedure ChainLocalSearch(
    UseStatus := Status.IterStatus <> 0;
    if UseStatus then
       begin
-      StatusOk := TryOpenWrite(FileStatus, PathStatus, Status.ShowMessage) = Success;
-      if StatusOk then
-         WriteHeader(FileStatus);
-      end
-   else
-      StatusOk := True;
+      WriteHeader(MultirunStats);
+      PrepareNextRun(MultirunStats);
+      end;
 
-   if StatusOk then with Stats do
+   with Stats do
       begin
       // Search loop
       repeat
@@ -364,25 +374,22 @@ procedure ChainLocalSearch(
          if NFound <> 0 then
             ShowNewBestScore(Solution, Status.ShowMessage);
          if Divisible(Iters, Status.IterStatus) then
-            WriteStatus(FileStatus, Iters, Solution, Level, {NTested:} i, NFound);
+            WriteStatus(MultirunStats, Solution, Iters, Level, {NTested:} i, NFound);
       until NFound = 0;
-
-      // Run complete
-      if UseStatus then
-         Close(FileStatus);
       end;
    end;
 
    
-// Perform local search starting from Solution, update Stats, report and save the
-// progress according to Status. The type of local search is determined by Params. 
+// Perform local search starting from Solution, update Stats and
+// MultirunStats. The type of local search is determined by Params. 
 // In case of RandomInit, Solution is initialized randomly.
 procedure LocalSearch(
-   var   Solution    :  TSolution;
-   var   Stats       :  TRunStats;
-   const Params      :  TLSParameters;
-   const Status      :  TLSStatus;
-         RandomInit  :  Boolean);
+   var   Solution       :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MultirunStats  :  TMultirunStats;
+   const Params         :  TLSParameters;
+   const Status         :  TLSStatus;
+         RandomInit     :  Boolean);
    begin
    // Initialization
    if RandomInit then
@@ -394,11 +401,12 @@ procedure LocalSearch(
          ClassicLocalSearch(
             Solution, 
             Stats, 
+            MultirunStats,
             {FullSearch:} Params = lsmFull, 
             Status
             );
       lsmChain:
-         ChainLocalSearch(Solution, Stats, Status);
+         ChainLocalSearch(Solution, Stats, MultirunStats, Status);
       else
          Assert(False);
       end;
@@ -438,10 +446,11 @@ procedure LSImprovement(
    var
          Stats    :  TRunStats;
          Params   :  TLSParameters;
+         Dummy    :  TMultirunStats;
    begin
    Stats  := EmptyStats;
    Params := LSMode;
-   LocalSearch(Solution, Stats, Params, NoStatus, {RandomInit:} False);
+   LocalSearch(Solution, Stats, Dummy, Params, NoStatus, {RandomInit:} False);
    end;
    
 

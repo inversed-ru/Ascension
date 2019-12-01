@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Common; ////////////////////////////////////////////////////////////////////////
 {
->> Version: 0.8
+>> Version: 0.9
 
 >> Description
    Common routines and types used by various metaheuristics.
@@ -21,12 +21,13 @@ unit Common; ///////////////////////////////////////////////////////////////////
    GitHub   : inversed-ru
    Twitter  : @inversed_ru
 
-** ToDo
+>> ToDo
     ? Split move lists and extended move lists sections into separate unit
     ? Use SignMinimize / SignMaximize instead of NormDeltaScore
     ? Rewrite NormDeltaScore using SignMinimize / SignMaximize
     
 >> Changelog
+   0.9 : 2019.10.01  + Multirun statistics section
    0.8 : 2019.05.21  ~ Renamed IsMinimize to Minimization
    0.7 : 2018.09.18  ~ FreePascal compatibility
                      ~ Renamed TScoreRelation to TScoreComparison
@@ -41,6 +42,7 @@ unit Common; ///////////////////////////////////////////////////////////////////
 {$MINENUMSIZE 4}                                                                                    
 interface ///////////////////////////////////////////////////////////////////////////
 uses
+      Arrays,
       Problem,
       Messages;
 type
@@ -63,6 +65,7 @@ type
          NFEpartial  :  Int64;
          Iters       :  Integer;
          end;
+      
 const
       ShortNames : array [TMetaheuristic] of AnsiString =
         ('GA', 'SA', 'LS', 'TS', 'CTS');
@@ -104,7 +107,38 @@ function NormDeltaScore(
          BScore   :  Real
          )        :  Real;
          overload;
-
+         
+{-----------------------<< Multirun statistics >>-----------------------------------}
+type
+      TMultirunStats =
+         record
+         Header         :  array of AnsiString;
+         NVars,
+         NSamples,
+         IdNextSample   :  Integer;
+         _              :  array of array of TRealArrayN;
+         end;
+         
+// Initialized multirun statistics with a given number of variables
+procedure InitMultirunStats(
+   var   MultirunStats  :  TMultirunStats;
+         NVars          :  Integer);
+         
+// Prepare MultirunStats for the next run data collection
+procedure PrepareNextRun(
+   var   MultirunStats  :  TMultirunStats);
+   
+// Add statistical Data to MultirunStats
+procedure AddSample(
+   var   MultirunStats  :  TMultirunStats;
+   const Data           :  TRealArray);
+   
+// Save MultirunStats to a text file at Path, return operation status
+function SaveStats(
+   const Path           :  AnsiString;
+   const MultirunStats  :  TMultirunStats
+         )              :  Boolean;
+   
 {-----------------------<< Solutions >>---------------------------------------------}
 
 // Swap the solutions A and B
@@ -239,7 +273,6 @@ uses
       InvSys,
       Math,    // Used: Power
       SpecFuncs,
-      Arrays,
       Statistics,
       RandVars;
 
@@ -312,6 +345,122 @@ function NormDeltaScore(
    if Minimization then
       Result := BScore - AScore else
       Result := AScore - BScore;
+   end;
+   
+{-----------------------<< Multirun statistics >>-----------------------------------}
+
+// Initialized multirun statistics with a given number of variables
+procedure InitMultirunStats(
+   var   MultirunStats  :  TMultirunStats;
+         NVars          :  Integer);
+   begin
+   SetLength(MultirunStats.Header,  NVars);
+   SetLength(MultirunStats._,       NVars);
+   MultirunStats.NVars        := NVars;
+   MultirunStats.NSamples     := 0;
+   MultirunStats.IdNextSample := 0;
+   end;
+   
+   
+// Prepare MultirunStats for the next run data collection
+procedure PrepareNextRun(
+   var   MultirunStats  :  TMultirunStats);
+   begin
+   MultirunStats.IdNextSample := 0;
+   end;
+   
+   
+// Add statistical Data to MultirunStats
+procedure AddSample(
+   var   MultirunStats  :  TMultirunStats;
+   const Data           :  TRealArray);
+   var
+         i              :  Integer;
+   begin
+   Assert(Length(Data) = MultirunStats.NVars);
+   with MultirunStats do
+      begin
+      // Resize the arrays if necessary
+      if IdNextSample = NSamples then
+         Inc(NSamples);
+      if Length(MultirunStats._[0]) < NSamples then
+         for i := 0 to NVars - 1 do
+            begin
+            SetLength(MultirunStats._[i], 2 * NSamples);
+            InitArrayN(MultirunStats._[i, NSamples - 1]);
+            end;
+            
+      // Append the data
+      for i := 0 to NVars - 1 do
+         Append(MultirunStats._[i, IdNextSample], Data[i]);
+      Inc(IdNextSample);
+      end;
+   end;
+   
+   
+// Save MultirunStats to a text file at Path, return operation status
+function SaveStats(
+   const Path           :  AnsiString;
+   const MultirunStats  :  TMultirunStats
+         )              :  Boolean;
+   var
+         i, j, k, N     :  Integer;
+         Q              :  Real;
+         X              :  TRealArray;
+         FileStats      :  Text;
+         SingleRun      :  Boolean;
+   const
+         NStats         =  4;
+         StatNames      :  array [1 .. NStats] of AnsiString 
+                        =  ('_M', '_SD', '_SE', '_Md');
+         Sep            :  array [Boolean] of AnsiString  = (Tab, '');
+   begin
+   Result := OpenWrite(FileStats, Path);
+   if (Result = Success) and (MultirunStats.NSamples > 0) then with MultirunStats do
+      begin
+      // Write the header
+      SingleRun := MultirunStats._[0, 0].N = 1;
+      if not SingleRun then
+         Write(FileStats, 'N');
+      for j := 0 to NVars - 1 do
+         if SingleRun then
+            Write(FileStats, Sep[j = 0], Header[j])
+         else
+            for k := 1 to NStats do
+               Write(FileStats, Tab, Header[j] + StatNames[k]);
+      WriteLn(FileStats);
+              
+      // Write the data
+      for i := 0 to NSamples - 1 do
+         begin
+         N := MultirunStats._[0, i].N;
+         if not SingleRun then
+            Write(FileStats, N);
+         for j := 0 to NVars - 1 do
+            if SingleRun then
+               Write(FileStats, Sep[j = 0], MultirunStats._[j, i]._[0])
+            else
+               begin
+               X := Copy(MultirunStats._[j, i]._, 0, N);
+               for k := 1 to NStats do
+                  begin
+                  case k of
+                     1: Q := Mean(X);
+                     2: Q := StandDev(X);
+                     3: Q := StandDev(X) / Sqrt(Max(1, N - 1));
+                     4: Q := Median(X);
+                     else
+                        Assert(False);
+                        Q := 0;
+                     end;
+                  Write(FileStats, Tab, Q);
+                  end;
+               end;
+         WriteLn(FileStats);
+         end;
+         
+      Close(FileStats);
+      end;
    end;
 
 {-----------------------<< Solutions >>---------------------------------------------}

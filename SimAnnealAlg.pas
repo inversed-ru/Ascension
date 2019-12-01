@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit SimAnnealAlg; //////////////////////////////////////////////////////////////////
 {
->> Version: 2.0
+>> Version: 3.1
 
 >> Description
    Implementation of a simulated annealing algorithm featuring various acceptance
@@ -45,6 +45,7 @@ unit SimAnnealAlg; /////////////////////////////////////////////////////////////
       one is selected at each iteration. Has no effect at low temperatures.
 
 >> Changelog
+   3.1 : 2019.10.01  + Multirun statistics collection
    3.0 : 2018.09.20  - Experimental cooling schedules
                      - Experimental algorithms
                      ~ Automatic final temperature selection formula
@@ -100,13 +101,15 @@ type
 
       TSAStatus = TBasicStatus;
 
+// #HACK Huge, needs simplification
 // Run the simulated annealing with specified Params, return the Best solution found 
-// and the search Stats, report and save the progress according to Status
+// and the search Stats, update MultirunStats
 procedure SimulatedAnnealing(
-   var   Best        :  TSolution;
-   var   Stats       :  TRunStats;
-   const Params      :  TSAParameters;
-   const Status      :  TSAStatus);
+   var   Best           :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MultirunStats  :  TMultirunStats;
+   const Params         :  TSAParameters;
+   const Status         :  TSAStatus);
 
 implementation //////////////////////////////////////////////////////////////////////
 uses
@@ -229,45 +232,56 @@ function GetTfin(
 
 // #HACK Huge, needs simplification
 // Run the simulated annealing with specified Params, return the Best solution found 
-// and the search Stats, report and save the progress according to Status
+// and the search Stats, update MultirunStats
 procedure SimulatedAnnealing(
-   var   Best        :  TSolution;
-   var   Stats       :  TRunStats;
-   const Params      :  TSAParameters;
-   const Status      :  TSAStatus);
-
-   // Write the header of the status file FileStatus
+   var   Best           :  TSolution;
+   var   Stats          :  TRunStats;
+   var   MultirunStats  :  TMultirunStats;
+   const Params         :  TSAParameters;
+   const Status         :  TSAStatus);
+   
+   const
+         NStatsFields   =  7;
+      
+   // Create the header of MultirunStats
    procedure WriteHeader(
-      var   FileStatus  :  Text);
+      var   MultirunStats  :  TMultirunStats);
       begin
-      WriteLn(FileStatus,
-         'Iter',        Tab,
-         'BestScore',   Tab,
-         'WorkScore',   Tab,
-         'T',           Tab,
-         'PAccept',     Tab,
-         'PImprove',    Tab,
-         'AvgScore'     );
+      with MultirunStats do
+         if NVars = 0 then
+            begin
+            InitMultirunStats(MultirunStats, NStatsFields);
+            SetLength(Header, NStatsFields);
+            Header[0] := 'Iter';
+            Header[1] := 'BestScore';
+            Header[2] := 'WorkScore';
+            Header[3] := 'T';
+            Header[4] := 'PAccept';
+            Header[5] := 'PImprove';
+            Header[6] := 'AvgScore';
+            end;
       end;
-
-   // Write a single line with annealing parameters to FileStatus
+      
+   // Add the current search statistics to MultirunStats
    procedure WriteStatus(
-      var   FileStatus  :  Text;
-            Iters       :  Int64;
-      const Work, Best  :  TSolution;
+      var   MultirunStats  :  TMultirunStats;
+      const Work, Best     :  TSolution;
+            Iters          :  Int64;
             T, PAccept,
             PImprove,
-            AvgScore    :  Real);
+            AvgScore       :  Real);
+      var   
+            Data           :  TRealArray;
       begin
-      WriteLn(FileStatus,
-         Iters,         Tab,
-         Best.Score,    Tab,
-         Work.Score,    Tab,
-         T,             Tab,
-         PAccept,       Tab,
-         PImprove,      Tab,
-         AvgScore       );
-      Flush(FileStatus);
+      SetLength(Data, NStatsFields);
+      Data[0] := Iters;
+      Data[1] := Best.Score;
+      Data[2] := Work.Score;
+      Data[3] := T;
+      Data[4] := PAccept;
+      Data[5] := PImprove;
+      Data[6] := AvgScore;
+      AddSample(MultirunStats, Data);
       end;
 
    var
@@ -284,12 +298,9 @@ procedure SimulatedAnnealing(
          Undo                 :  TSAUndo;
          OldScore, PrevBest   :  TScore;
          Done                 :  Boolean;
-         fileStatus           :  Text;
    begin
-   if (Status.IterStatus = 0) or
-      TryOpenWrite(fileStatus, PathStatus, Status.ShowMessage) then with Params do
+   with Params do
       begin
-
       // Initialization
       NewSolution(Best);
       PrevBest := Best.Score;
@@ -297,7 +308,10 @@ procedure SimulatedAnnealing(
       UseT0   := GetT0  (Params);
       UseTfin := GetTfin(Params);
       if Status.IterStatus <> 0 then
-         WriteHeader(fileStatus);
+         begin
+         WriteHeader(MultirunStats);
+         PrepareNextRun(MultirunStats);
+         end;
 
       // Perform all reheat stages
       for Stage := 0 to NReheat - 1 do
@@ -351,7 +365,7 @@ procedure SimulatedAnnealing(
             // Write status
             if Divisible(Iters, Status.IterStatus) then
                begin
-               WriteStatus(fileStatus, Iters, Work, Best, T, PAccept, PImprove, AvgScore);
+               WriteStatus(MultirunStats, Work, Best, Iters, T, PAccept, PImprove, AvgScore);
                if CompareScores(Best.Score, PrevBest) = scoreBetter then
                   begin
                   ShowNewBestScore(Best, Status.ShowMessage);
@@ -364,8 +378,6 @@ procedure SimulatedAnnealing(
          end;
 
       // Run complete
-      if Status.IterStatus <> 0 then
-         Close(fileStatus);
       Stats.NFEPartial := Iters;
       TrySaveSolution(NameBest, Best, Status.ShowMessage);
       end;

@@ -1,5 +1,5 @@
 { 
-Copyright (c) Peter Karpov 2010 - 2018.
+Copyright (c) Peter Karpov 2010 - 2019.
 
 Usage of the works is permitted provided that this instrument is retained with 
 the works, so that any entity that uses the works is notified of this instrument.
@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit SolutionLists; /////////////////////////////////////////////////////////////////
 {
->> Version: 0.5
+>> Version: 0.6
 
 >> Description
    TSolutionList type and related routines
@@ -23,8 +23,12 @@ unit SolutionLists; ////////////////////////////////////////////////////////////
 
 >> ToDo
     - Merge AddSolution and AppendSolution into one procedure with RecalcRanking flag
+    - Suitable data structure for rank <-> index conversions
+    - Optimize ClosestScoreIndex by using binary search
 
 >> Changelog
+   0.6 : 2019.10.24  + IndexRank field, updated by most routines affecting RankIndex
+                     + ClosestScoreIndex function
    0.5 : 2018.08.23  * Range check error in RandSolIndex
                      ~ AverageDistance function now has an extra ToBest argument
                      + Fitness uniform selection
@@ -48,7 +52,8 @@ type
          _              :  TSolutions;
           BestIndex,
          WorstIndex     :  TSolutionIndex;
-         RankIndex      :  TIntArray;
+         RankIndex,
+         IndexRank      :  TIntArray;
          Best           :  TSolution;
          end;
       PSolutionList = ^TSolutionList;
@@ -79,9 +84,9 @@ procedure AssignSolList(
 {-----------------------<< Ranking >>-----------------------------------------------}
 
 // Sort the solutions from SolList in descending order. Positions of actual solutions
-// are not changed, but RankIndex, BestIndex, WorstIndex, Best fields are updated.
-// InsSort specifies whether insertion sort should be used, which might be faster 
-// when the changes are small.
+// are not changed, but RankIndex, IndexRank, BestIndex, WorstIndex, Best fields are 
+// updated. InsSort specifies whether insertion sort should be used, which might be
+// faster when the changes are small.
 procedure SetRanking(
    var   SolList  :  TSolutionList;
          InsSort  :  Boolean = False);
@@ -120,6 +125,13 @@ function RandFitUniformIndex(
 procedure TwoRandFitUniformIndices(
    var   i1, i2   :  TSolutionIndex;
    const SolList  :  TSolutionList);
+   
+// Return the index of a solution from SolList with the closest score
+// to the specified value
+function ClosestScoreIndex(
+   const SolList     :  TSolutionList;
+         Score       :  Real
+         )           :  Integer;
 
 {-----------------------<< Lists operations >>--------------------------------------}
 
@@ -245,6 +257,7 @@ procedure InitSolList(
    SolList.N := N;
    SetLength(SolList._,          N);
    SetLength(SolList.RankIndex,  N);
+   SetLength(SolList.IndexRank,  N);
    end;
 
 
@@ -287,6 +300,7 @@ procedure AssignSolList(
    SLTo. BestIndex := SLFrom. BestIndex;
    SLTo.WorstIndex := SLFrom.WorstIndex;
    SLTo.RankIndex  := Copy(SLFrom.RankIndex);
+   SLTo.IndexRank  := Copy(SLFrom.IndexRank);
    AssignSolution(SLTo.Best, SLFrom.Best);
    InitSolList(SLTo, SLFrom.N);
    for i := 0 to SLTo.N - 1 do
@@ -351,21 +365,32 @@ procedure SwapSolutions(
 
 
 // Sort the solutions from SolList in descending order. Positions of actual solutions
-// are not changed, but RankIndex, BestIndex, WorstIndex, Best fields are updated.
-// InsSort specifies whether insertion sort should be used, which might be faster 
-// when the changes are small.
+// are not changed, but RankIndex, IndexRank, BestIndex, WorstIndex, Best fields are 
+// updated. InsSort specifies whether insertion sort should be used, which might be
+// faster when the changes are small.
 procedure SetRanking(
    var   SolList  :  TSolutionList;
          InsSort  :  Boolean = False);
+   var
+         i, N     :  Integer;
    begin
    if SolList.N <> 0 then with SolList do
       begin
+      // Calculate the ranking
       if InsSort then
          InsertionSortOrder(
             RankIndex, @SolList._, CompareSolutions, N, soDescending)
       else
          SortOrder(
             RankIndex, @SolList._, CompareSolutions, N, soDescending);
+      
+      // Fill index to rank array
+      if Length(IndexRank) <> N then
+         SetLength(IndexRank, N);
+      for i := 0 to N - 1 do
+         IndexRank[RankIndex[i]] := i;
+         
+      // Update extra fields
        BestIndex := RankIndex[0];
       WorstIndex := RankIndex[N - 1];
       AssignSolution(Best, SolList._[BestIndex]);
@@ -387,7 +412,10 @@ procedure SortSolList(
       WorstIndex := N - 1;
       AssignSolution( Best, SolList._[0] );
       for i := 0 to N - 1 do
+         begin
          RankIndex[i] := i;
+         IndexRank[i] := i;
+         end;
       end;
    end;
 
@@ -460,29 +488,39 @@ procedure TwoRandSolIndices(
    until i2 <> i1;
    end;
 
+   
+// Return the index of a solution from SolList with the closest score
+// to the specified value
+// #HACK Slow, should use binary search. Fitness-uniform selection requires
+// random tiebreaks, but this is no big deal since FUS is terrible
+function ClosestScoreIndex(
+   const SolList     :  TSolutionList;
+         Score       :  Real
+         )           :  Integer;
+   var
+         dS          :  TRealArray;
+         i           :  Integer;
+   begin
+   SetLength(dS, SolList.N);
+   for i := 0 to SolList.N - 1 do
+      dS[i] := Abs(Score - SolList._[i].Score);
+   Result := RandMinIndex(dS);
+   end;
+   
 
 // Return the index of a solution selected using fitness uniform selection
 function RandFitUniformIndex(
    const SolList     :  TSolutionList
          )           :  Integer;
    var
-         f           :  Real;
-         i           :  Integer;
-         df          :  TRealArray;
+         S           :  Real;
    begin
    with SolList do
       begin
-      f := RandUniform(
+      S := RandUniform(
          SolList._[WorstIndex].Score,
          SolList._[ BestIndex].Score);
-
-      // Return index of a random solution with score closest to f
-      // #HACK slow, but how to implement it faster while returning a random
-      // solution in case of a tie?
-      SetLength(df, SolList.N);
-      for i := 0 to SolList.N - 1 do
-         df[i] := Abs(f - SolList._[i].Score);
-      Result := RandMinIndex(df);
+      Result := ClosestScoreIndex(SolList, S);
       end;
    end;
 
@@ -514,6 +552,7 @@ procedure CopyBest(
       begin
       AssignSolution(SLTo._[i], SLFrom._[ SLFrom.RankIndex[i] ]);
       SLTo.RankIndex[i] := i;
+      SLTo.IndexRank[i] := i;
       end;
       
    // Update ranking information
@@ -557,7 +596,7 @@ procedure Resize(
 
 
 // Increment the length of SolList. A new element pointing to the new empty solution 
-// is added to RankIndex.
+// is added to RankIndex and IndexRank.
 procedure IncLen(
    var   SolList  :  TSolutionList);
    begin
@@ -567,7 +606,9 @@ procedure IncLen(
       if N > Length(SolList._) then
          SetLength (SolList._, 2 * N);
       SetLength(RankIndex, N);
+      SetLength(IndexRank, N);
       RankIndex[N - 1] := N - 1;
+      IndexRank[N - 1] := N - 1;
       end;
    end;
 
@@ -692,8 +733,7 @@ procedure ExtractScores(
    SetLength(Scores, SolList.N);
    for i := 0 to SolList.N - 1 do
       if Sorted then
-         Scores[i] := SolList._[SolList.RankIndex[i]].Score
-      else
+         Scores[i] := SolList._[SolList.RankIndex[i]].Score else
          Scores[i] := SolList._[                  i ].Score;
    end;
 
