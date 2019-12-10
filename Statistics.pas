@@ -1,5 +1,5 @@
 { 
-Copyright (c) Peter Karpov 2010 - 2017.
+Copyright (c) Peter Karpov 2010 - 2019.
 
 Usage of the works is permitted provided that this instrument is retained with 
 the works, so that any entity that uses the works is notified of this instrument.
@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Statistics; ////////////////////////////////////////////////////////////////////
 {
->> Version: 2.0
+>> Version: 2.1
 
 >> Description
    Unit for calculation of various statistical quantities. Part of InvLibs unit 
@@ -53,12 +53,13 @@ unit Statistics; ///////////////////////////////////////////////////////////////
          Schoonjans F, De Bacquer D, Schmid P.
 
 >> Changelog
+   2.1   : 2019.10.30   + 'Running statistics' section
    2.0   : 2017.12.11   ~ Many routines renamed. Procedures now have the 
                           "Get" prefix, functions do not
                         - RandMinIndex, RandMaxIndex functions moved to 
                           Arrays unit
    1.20  : 2015.06.26   + PowerMean function
-   1.19  : 2014.08.27   + Correlation section
+   1.19  : 2014.08.27   + 'Correlation' section
    1.18  : 2013.06.14   + Integer version of GetSum
    1.17  : 2013.06.13   + Integer version of Midspread
    1.16  : 2013.06.09   + Normalization argument for RankTransform, overloaded
@@ -75,7 +76,7 @@ unit Statistics; ///////////////////////////////////////////////////////////////
                         + Unit sum normalization type
    1.10  : 2012.12.21   + RankTransform procedure
    1.9   : 2012.04.18   + GetSigma function
-   1.8   : 2011.11.28   + mean absolute deviation function
+   1.8   : 2011.11.28   + Mean absolute deviation function
    1.7   : 2011.11.15   + New normalization modes
    1.6   : 2011.11.05   ~ Rewritten quantile function to use interpolation
                         + RobustMean function
@@ -161,7 +162,36 @@ procedure GetMeanStandDevSkew(
          StandDev,
          Skew     :  Real;
    const Data     :  array of Real);
-         
+   
+{-----------------------<< Running statistics >>------------------------------------}
+type 
+      TRunningStats = 
+         record
+         N        :  Integer; // Sample count
+         M,                   // Mean
+         S, PrevM :  Real;
+         end;
+
+// Initialize Stats
+procedure InitRunningStats(
+   var   Stats    :  TRunningStats);
+
+// Update Stats with sample X
+procedure UpdateRunningStats(
+   var   Stats    :  TRunningStats;
+         X        :  Real);
+
+// Return Stats's standard deviation or 0 if there are less than 2 samples
+function StandDev(
+   const Stats    :  TRunningStats
+         )        :  Real;
+         overload;
+
+// Return Stats's standard error or 0 if there are less than 2 samples
+function StandError(
+   const Stats    :  TRunningStats
+         )        :  Real;
+
 {-----------------------<< Other measures of location and scale >>------------------}
          
 // Weighted average of X with weights W
@@ -535,6 +565,61 @@ procedure GetMeanStandDevSkew(
       end
    else
       Skew := 0;
+   end;
+   
+{-----------------------<< Running statistics >>------------------------------------}
+
+// Initialize Stats
+procedure InitRunningStats(
+   var   Stats    :  TRunningStats);
+   begin
+   Stats.N := 0;
+   Stats.M := 0;
+   Stats.S := 0;
+   end;
+   
+   
+// Update Stats with sample X
+procedure UpdateRunningStats(
+   var   Stats    :  TRunningStats;
+         X        :  Real);
+   begin
+   with Stats do
+      begin
+      Inc(N);
+      PrevM := M;
+      if N = 1 then
+         M := X
+      else
+         begin
+         M := PrevM + (X - PrevM) / N;
+         S := S + (X - PrevM) * (X - M);
+         end;
+      end;
+   end;
+   
+   
+// Return Stats's standard deviation or 0 if there are less than 2 samples
+function StandDev(
+   const Stats    :  TRunningStats
+         )        :  Real;
+   begin
+   with Stats do
+      if N > 1 then
+         Result := Sqrt( S / (N - 1) ) else
+         Result := 0;
+   end;
+   
+   
+// Return Stats's standard error or 0 if there are less than 2 samples
+function StandError(
+   const Stats    :  TRunningStats
+         )        :  Real;
+   begin
+   with Stats do
+      if N > 1 then
+         Result := Sqrt( S / (N * (N - 1) ) ) else
+         Result := 0;
    end;
    
 {-----------------------<< Other measures of location and scale >>------------------}

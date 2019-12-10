@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Arrays; ////////////////////////////////////////////////////////////////////////
 {
->> Version: 1.4
+>> Version: 1.5
 
 >> Description
    Basic array routines. Part of InvLibs unit collection.
@@ -29,6 +29,7 @@ unit Arrays; ///////////////////////////////////////////////////////////////////
    - See if any operations are bottlenecks in any programs and optimize them
 
 >> Changelog
+   1.5   : 2019.11.10   * AppendUnique name typo
    1.4   : 2018.12.14   ~ Argument order in SaveToText and SaveToFile
                         + SaveToText for TIntArrays
    1.3   : 2018.11.08   + Overloaded version of AppendArray for TIntArrays
@@ -294,7 +295,7 @@ procedure Concat(
 
 // Append Value to A if it is distinct from all the elements, 
 // return if it was appended. Uses linear search, ~N time.
-function AppednUnique(
+function AppendUnique(
    var   A        :  TIntArrayN;
          Value    :  Integer
          )        :  Boolean;
@@ -909,7 +910,7 @@ procedure Concat(
 
 // Append Value to A if it is distinct from all the elements, 
 // return if it was appended. Uses linear search, ~N time.
-function AppednUnique(
+function AppendUnique(
    var   A        :  TIntArrayN;
          Value    :  Integer
          )        :  Boolean;
