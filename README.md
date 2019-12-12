@@ -95,6 +95,7 @@ StatusIters | Interval between saving the data about optimization process to a s
 
 ### Genetic Algorithm
 See the [algorithm page](http://inversed.ru/Asc_GA.htm) for a detailed description of selection, replacement and acceptance parameters.
+
 Parameter | Description 
 --- | --- 
 PopulationSize | Number of individuals in the population
