@@ -601,7 +601,7 @@ procedure RunTS(
 // Run the metaheuristic specified in a config file
 procedure Main;
    const
-         PathConfig        = 'config.ini';
+         PathConfig        = 'Config.ini';
          PathRuns          = 'Runs.txt';
          PathBest          = 'Runs_Best';
          ErrorInvalidAlg   = 'Invalid algorithm specified';
