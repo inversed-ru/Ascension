@@ -26,10 +26,13 @@ unit Problem; //////////////////////////////////////////////////////////////////
    Twitter  : @inversed_ru
    
 >> ToDo
-   ! Multiresolution statistics
+   - Multiresolution statistics
+   - Sample extension
+   - Image stylization
 
 >> Changelog
-   0.1 : 2018.12.22 + Parameters moved to config
+   0.2 : 2019.12.26 + Exponential averaging for smooth animations
+   0.1 : 2019.12.22 ~ Parameters moved to config
    0.0 : 2018.11.07 + Initial version
    Notation: + added, - removed, * fixed, ~ changed   
 }
@@ -56,6 +59,7 @@ type
          
       TPixel = Integer; 
       TImage = array of array of TPixel;
+      TGrayscaleImage = array of array of Real;
          
       TSolution =
          record
@@ -103,13 +107,18 @@ uses
       StringLists,
       IniConfigs;
 var
-      ImageSize,
-      SavePeriod        :  Integer;
+      ImageSizeX,
+      ImageSizeY,
+      SavePeriod,
+      AvgPeriod         :  Integer;
       Sample            :  TImage;
       TargetHists       :  THists;
-      PathAnim          :  AnsiString;
+      PathAnim,
+      PathOutput        :  AnsiString;
       UseSamplePatches,
       RandChangeSize    :  Boolean;
+      AvgImage          :  TGrayscaleImage;
+      ExpAvgTime        :  Real;
 type
       TDistFunc = (dfL1, dfL2, dfTriangDiscr, dfHellinger, dfJSD);
       TByteArray = array of Byte;
@@ -362,6 +371,42 @@ procedure UpdateHists(
    end;
 {$RANGECHECKS ON} {$OVERFLOWCHECKS ON} 
    
+{-----------------------<< Image Averaging >>---------------------------------------}
+
+// Set the size of grayscale Image to (ImageSizeX, ImageSizeY) and 
+// fill it with the sample mean
+procedure InitGrayscaleImage(
+   var   Image    :  TGrayscaleImage);
+   var
+         x, y     :  Integer;
+         P        :  Real;
+   begin
+   // Create the array
+   SetLength(Image, ImageSizeY);
+   for y := 0 to ImageSizeY - 1 do
+      SetLength(Image[y], ImageSizeX);
+      
+   // Initialize
+   P := TargetHists[1]._[1] / TargetHists[1].Total;
+   for y := 0 to ImageSizeY - 1 do
+      for x := 0 to ImageSizeX - 1 do
+         Image[y, x] := P;
+   end;
+   
+   
+// Blend the Image with BinImage using blending factor Alpha
+procedure BlendImage(
+   var   Image    :  TGrayscaleImage;
+   const BinImage :  TImage;
+         Alpha    :  Real);
+   var
+         x, y     :  Integer;
+   begin
+   for y := 0 to ImageSizeY - 1 do
+      for x := 0 to ImageSizeX - 1 do
+         Image[y, x] := Blend(Image[y, x], BinImage[y, x], Alpha);
+   end;
+   
 {-----------------------<< Misc problem-specific routines >>------------------------}
    
 // Try to load Pixels from Path, return status
@@ -471,6 +516,20 @@ procedure SavePBMToText(
       Write(FilePBM, AnsiChar(Bytes[i]));
    end;
    
+   
+// Save grayscale Pixels to FilePGM
+procedure SavePGMToText(
+   var   FilePGM  :  Text;
+   const Pixels   :  TGrayscaleImage);
+   var
+         i, j     :  Integer;
+   begin
+   Write(FilePGM, 'P5 ', Length(Pixels[0]), ' ', Length(Pixels), ' ', High(Byte), ' ');
+   for j := 0 to Length(Pixels) - 1 do
+      for i := 0 to Length(Pixels[j]) - 1 do
+         Write( FilePGM, AnsiChar( Round( (1 - Pixels[j, i]) * High(Byte) ) ) );
+   end;
+   
  
 // Save Pixels to Path
 procedure SavePBM(
@@ -482,6 +541,19 @@ procedure SavePBM(
    OpenWrite(FilePBM, Path);
    SavePBMToText(FilePBM, Pixels);
    Close(FilePBM);
+   end;
+   
+   
+// Save grayscale Pixels to Path
+procedure SavePGM(
+   const Path     :  AnsiString;
+   const Pixels   :  TGrayscaleImage);
+   var
+         FilePGM  :  Text;
+   begin
+   OpenWrite(FilePGM, Path);
+   SavePGMToText(FilePGM, Pixels);
+   Close(FilePGM);
    end;
    
    
@@ -548,13 +620,14 @@ procedure SaveSolution(
    var
          x, y        :  Integer;
    begin
-   WriteLn(FileSol, 'P1 ', ImageSize, ' ', ImageSize, AnsiChar(10));
-   for y := 0 to ImageSize - 1 do
+   WriteLn(FileSol, 'P1 ', ImageSizeX, ' ', ImageSizeY, AnsiChar(10));
+   for y := 0 to ImageSizeY - 1 do
       begin
-      for x := 0 to ImageSize - 1 do
+      for x := 0 to ImageSizeX - 1 do
          Write(FileSol, Solution.Pixels[y, x]);
       WriteLn(FileSol);
       end;
+   SavePBM(PathOutput, Solution.Pixels);
    end;
 
 
@@ -575,14 +648,14 @@ procedure NewSolution(
          P1       :  Real;
    begin
    // Create the array
-   SetLength(Solution.Pixels, ImageSize);
-   for y := 0 to ImageSize - 1 do
-      SetLength(Solution.Pixels[y], ImageSize);
+   SetLength(Solution.Pixels, ImageSizeY);
+   for y := 0 to ImageSizeY - 1 do
+      SetLength(Solution.Pixels[y], ImageSizeX);
      
-   // Fill with noise having the same mean
+   // Fill with noise having the sample mean
    P1 := TargetHists[1]._[1] / TargetHists[1].Total;
-   for y := 0 to ImageSize - 1 do   
-      for x := 0 to ImageSize - 1 do
+   for y := 0 to ImageSizeY - 1 do   
+      for x := 0 to ImageSizeX - 1 do
          Solution.Pixels[y, x] := Ord(Random < P1);
          
    // Initialize histogram change masks
@@ -605,8 +678,8 @@ function Distance(
          Sum         :  TSolutionDistance;
    begin
    Sum := 0;
-   for y := 0 to ImageSize - 1 do
-      for x := 0 to ImageSize - 1 do
+   for y := 0 to ImageSizeY - 1 do
+      for x := 0 to ImageSizeX - 1 do
          if Solution1.Pixels[y, x] <> Solution2.Pixels[y, x] then
             Inc(Sum);
    Result := Sum;
@@ -633,10 +706,17 @@ procedure MakeNeighbour(
    with Solution, Undo do
       begin
       // Save accepted solutions
-      if (SavePeriod <> 0) and not Undone then
+      if (ExpAvgTime > 0) and (AvgPeriod > 0) and (IdSave mod AvgPeriod = 0) then
+         BlendImage(AvgImage, Pixels, {Alpha:} AvgPeriod / ExpAvgTime);
+      if (SavePeriod <> 0) then //and not Undone then
          begin
          if IdSave mod SavePeriod = 0 then
-            SavePBM(Format(PathAnim + '{>08}.pbm', [IdSave div SavePeriod]), Pixels);
+            begin
+            Path := Format(PathAnim + '{>08}.pbm', [IdSave div SavePeriod]);
+            if ExpAvgTime > 0 then
+               SavePGM(Path, AvgImage) else
+               SavePBM(Path, Pixels);
+            end;
          Inc(IdSave);
          end;
       
@@ -644,8 +724,8 @@ procedure MakeNeighbour(
       if RandChangeSize then
          PatchSize := RandRange(1, MaxChangeSize) else
          PatchSize := MaxChangeSize;
-      x := RandRange(0, ImageSize - PatchSize);
-      y := RandRange(0, ImageSize - PatchSize);
+      x := RandRange(0, ImageSizeX - PatchSize);
+      y := RandRange(0, ImageSizeY - PatchSize);
       CollectAllPatchIds(OldIds, Pixels, x, y, PatchSize);
       
       // Change a patch of pixels, save new Ids
@@ -750,10 +830,16 @@ repeat
       Failed := True;
 {<}   break;
       end;
-   if GetIntProperty(ImageSize, Config, 'Size') = Fail then
-      ImageSize := 128;
+   if GetIntProperty(ImageSizeX, Config, 'SizeX') = Fail then
+      ImageSizeX := 128;
+   if GetIntProperty(ImageSizeY, Config, 'SizeY') = Fail then
+      ImageSizeY := 128;
    if GetIntProperty(SavePeriod, Config, 'SavePeriod') = Fail then
       SavePeriod := 0;
+   if GetIntProperty(AvgPeriod, Config, 'AvgPeriod') = Fail then
+      AvgPeriod := 0;
+   if GetRealProperty(ExpAvgTime, Config, 'AvgTime') = Fail then
+      ExpAvgTime := 0;
    if GetStringProperty(PathAnim, Config, 'SavePath') = Fail then
       begin
       PathAnim := '';
@@ -761,10 +847,12 @@ repeat
       end;
    if GetStringProperty(PathInput, Config, 'Sample') = Fail then
       PathInput := 'Sample.pbm';
+   if GetStringProperty(PathOutput, Config, 'Output') = Fail then
+      PathInput := 'Output.pbm';
    if GetBoolProperty(UseSamplePatches, Config, 'SamplePatches') = Fail then
       UseSamplePatches := True;
    if GetBoolProperty(RandChangeSize, Config, 'RandChangeSize') = Fail then
-      RandChangeSize := True;
+      RandChangeSize := False;
    if LoadPBM(Sample, PathInput) = Fail then
       begin
       WriteLn('Could not open ' + PathInput);
@@ -773,12 +861,15 @@ repeat
       end;
 until True;
 
-// Calculate the target histograms on success
+// Continue the initialization if all parameters are loaded succesfully
 if Failed then
    begin
    ReadLn;
    exit;
    end
 else
+   begin
    CalcHists(TargetHists, Sample);
+   InitGrayscaleImage(AvgImage);
+   end;
 end.
