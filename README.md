@@ -17,6 +17,7 @@ File | Problem
 --- | ---
 Problem_2DHP.pas | Hydrophobic-polar protein folding model
 Problem_3DNQ.pas | 3D N queens
+Problem_BinTexGen.pas | Binary texture generation
 Problem_Chess_Covering.pas | Queen (non)domination, knights covering
 Problem_NQ.pas | N queens
 Problem_No_Subsquares.pas | Maximal density subsquare-free arrangements
