@@ -9,7 +9,7 @@ DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 {$IFDEF FPC} {$MODE DELPHI} {$ENDIF}
 unit Problem; ///////////////////////////////////////////////////////////////////////
 {
->> Version: 0.1
+>> Version: 0.3
 
 >> Description
    Binary texture generation PDM: generate a binary texture that matches the 
@@ -31,6 +31,7 @@ unit Problem; //////////////////////////////////////////////////////////////////
    - Image stylization
 
 >> Changelog
+   0.3 : 2019.12.29 * LoadPBM causing FPC compilation error
    0.2 : 2019.12.26 + Exponential averaging for smooth animations
    0.1 : 2019.12.22 ~ Parameters moved to config
    0.0 : 2018.11.07 + Initial version
@@ -68,7 +69,8 @@ type
          IsChanged   :  array [1 .. NHists] of TBoolArray;
          Undone      :  Boolean;
          IdSave      :  Integer;
-         Score       :  TScore;
+         Score,
+         BestSoFar   :  TScore;
          end;
 
       TSolutionDistance = Integer;
@@ -416,8 +418,10 @@ function LoadPBM(
          )        :  Boolean;
    var
          FileText :  Text;
-         Magic    :  AnsiString;
+         FileByte :  TByteFile;
          Char     :  AnsiChar;
+         Magic    :  AnsiString;
+         b        :  Byte;
          x, y, k,
          SizeX,
          SizeY    :  Integer;
@@ -425,10 +429,8 @@ function LoadPBM(
          MSB      =  7;
    begin
    // Try to open the file
-   Assign(FileText, Path);
-   SetLineBreakStyle(FileText, tlbsLF);
-   Reset(FileText);
-   //Result := Fail;
+   OpenRead(FileText, Path);
+   Result := Fail;
    //if OpenRead(FileText, Path) = Fail then
    //{<}exit;
 
@@ -446,11 +448,28 @@ function LoadPBM(
       end;
 
    // Initialize the array
-   Read(FileText, SizeX, SizeY, Char);
+   Read(FileText, SizeX, SizeY);
    SetLength(Pixels, SizeY);
    for y := 0 to SizeY - 1 do
       SetLength(Pixels[y], SizeX);
+   Close(FileText);
 
+   // Find the data section
+   OpenRead(FileByte, Path);
+   k := 0;
+   x := 0;
+   repeat
+      Read(FileByte, b);
+      if b <= 32 then
+         begin
+         Inc(x);
+         if x = 1 then
+            Inc(k);
+         end
+      else
+         x := 0;
+   until k = 3;
+   
    // Read the bits
    for y := 0 to SizeY - 1 do
       begin
@@ -460,13 +479,14 @@ function LoadPBM(
          if k < 0 then
             begin
             k := MSB;
-            Read(FileText, Char);
+            Read(FileByte, b);
             end;
-         Pixels[y, x] := Ord( (Byte(Char) and (1 shl k)) <> 0 );
+         Pixels[y, x] := Ord( (b and (1 shl k)) <> 0 );
          Dec(k);
          end;
       end;
    Result := Success;
+   Close(FileByte);
    end;
    
    
@@ -607,9 +627,10 @@ procedure AssignSolution(
       AssignHist(SolTo.Hists[i], SolFrom.Hists[i]);
       SolTo.IsChanged[i] := Copy(SolFrom.IsChanged[i]);
       end;
-   SolTo.Score  := SolFrom.Score;
-   SolTo.Undone := SolFrom.Undone;
-   SolTo.IdSave := SolFrom.IdSave;
+   SolTo.Score     := SolFrom.Score;
+   SolTo.BestSoFar := SolFrom.Score;
+   SolTo.Undone    := SolFrom.Undone;
+   SolTo.IdSave    := SolFrom.IdSave;
    end;
 
 
@@ -665,6 +686,7 @@ procedure NewSolution(
    Solution.Undone := False;
    Solution.IdSave := 0;
    SetScore(Solution);
+   Solution.BestSoFar := Solution.Score;
    end;
    
 
@@ -708,7 +730,8 @@ procedure MakeNeighbour(
       // Save accepted solutions
       if (ExpAvgTime > 0) and (AvgPeriod > 0) and (IdSave mod AvgPeriod = 0) then
          BlendImage(AvgImage, Pixels, {Alpha:} AvgPeriod / ExpAvgTime);
-      if (SavePeriod <> 0) then //and not Undone then
+      
+      if (SavePeriod <> 0) and not Undone then
          begin
          if IdSave mod SavePeriod = 0 then
             begin
